@@ -1,0 +1,46 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://discord.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "||127.0.0.1",
+      "resourceTypes": [
+        "websocket",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://discord.com"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "127.0.0.1",
+      "resourceTypes": [
+        "websocket",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
+  }
+]

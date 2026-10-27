@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schemas.premid.app/metadata/1.12",
+  "apiVersion": 1,
+  "author": {
+    "name": "Miruro Community",
+    "id": "0"
+  },
+  "service": "Miruro",
+  "altnames": [
+    "Miruro.tv",
+    "Miruro.cx"
+  ],
+  "description": {
+    "en": "Miruro is a free anime streaming platform with a clean modern interface, offering subbed and dubbed anime with no ads."
+  },
+  "url": [
+    "www.miruro.tv",
+    "miruro.tv",
+    "www.miruro.cx",
+    "miruro.cx"
+  ],
+  "regExp": "([a-z0-9-]+[.])*miruro[.](tv|cx|online)[/]",
+  "version": "1.2.1",
+  "logo": "https://cdn.jsdelivr.net/gh/D4rkov/Miruro-RPC@main/assets/icon.png",
+  "thumbnail": "https://cdn.jsdelivr.net/gh/D4rkov/Miruro-RPC@main/assets/icon.png",
+  "color": "#8A2BE2",
+  "category": "anime",
+  "tags": [
+    "anime",
+    "streaming",
+    "miruro"
+  ],
+  "iframe": true,
+  "iFrameRegExp": ".*",
+  "settings": [
+    {
+      "id": "browsing",
+      "title": "Show Browsing Status",
+      "icon": "fas fa-eye",
+      "value": true
+    },
+    {
+      "id": "timestamps",
+      "title": "Show Video Timestamps",
+      "icon": "fas fa-clock",
+      "value": true
+    },
+    {
+      "id": "buttons",
+      "title": "Show Watch Episode Button",
+      "icon": "fas fa-external-link-alt",
+      "value": true
+    },
+    {
+      "id": "cover",
+      "title": "Show Anime Cover Art",
+      "icon": "fas fa-image",
+      "value": true
+    },
+    {
+      "id": "discordUserId",
+      "title": "Your Discord User ID (Optional)",
+      "icon": "fab fa-discord",
+      "value": ""
+    }
+  ]
+}
