@@ -1,8 +1,8 @@
 @echo off
-title Miruro Discord RPC Bridge - Stop / Uninstall
+title Stream Discord RPC Bridge - Stop / Uninstall
 
 echo ========================================================
-echo       Miruro Discord Rich Presence Bridge Stopper       
+echo       Discord Rich Presence Bridge Stopper       
 echo ========================================================
 echo.
 
@@ -23,12 +23,12 @@ if exist "%STARTUP_FOLDER%\MiruroDiscordBridge.vbs" (
 )
 
 :: 2. Terminate running bridge background processes
-echo [OK] Stopping running Miruro Bridge processes...
-powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*bridge.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
+echo [OK] Stopping running Bridge processes on port 19890...
+powershell -NoProfile -Command "$c = Get-NetTCPConnection -LocalPort 19890 -ErrorAction SilentlyContinue; if ($c) { Stop-Process -Id $c.OwningProcess -Force }" >nul 2>&1
 
 echo.
 echo ========================================================
-echo   Miruro Discord Bridge has been stopped and uninstalled.
+echo   Discord Bridge has been stopped and uninstalled.
 echo ========================================================
 echo.
 pause

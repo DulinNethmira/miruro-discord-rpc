@@ -1,6 +1,7 @@
 /**
- * Miruro Discord Rich Presence — Offscreen WebSocket Engine
+ * Miruro & VidBox Discord Rich Presence — Offscreen WebSocket Engine
  * Connects to the local IPC bridge at ws://127.0.0.1:19890
+ * Features robust auto-reconnection with zero silent hangs.
  */
 
 const BRIDGE_PORT = 19890;
@@ -37,37 +38,25 @@ function connectToBridge() {
     socket = null;
   }
 
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
   isReady = false;
   isConnecting = true;
   setConnectionState(false, null, null);
 
   const wsUrl = `ws://127.0.0.1:${BRIDGE_PORT}`;
-  console.log(`[Miruro RPC Offscreen] Connecting to IPC Bridge on ${wsUrl}...`);
-
-  let ws = null;
-  let attemptHandled = false;
-
-  function failAttempt() {
-    if (attemptHandled) return;
-    attemptHandled = true;
-
-    if (ws && ws === socket) {
-      socket = null;
-      isReady = false;
-      setConnectionState(false, null, null);
-    }
-    isConnecting = false;
-    scheduleReconnect();
-  }
+  console.log(`[Stream RPC Offscreen] Connecting to IPC Bridge on ${wsUrl}...`);
 
   try {
-    ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(wsUrl);
     socket = ws;
 
     ws.onopen = () => {
-      attemptHandled = true;
       isConnecting = false;
-      console.log("[Miruro RPC Offscreen] Connected to local IPC bridge!");
+      console.log("[Stream RPC Offscreen] Connected to local IPC bridge!");
 
       // Sync custom Client ID if user configured one
       try {
@@ -82,7 +71,7 @@ function connectToBridge() {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        console.log("[Miruro RPC Offscreen] Message from bridge:", msg.type || msg.cmd);
+        console.log("[Stream RPC Offscreen] Message from bridge:", msg.type || msg.cmd);
 
         if (msg.type === "DISCORD_STATUS") {
           isReady = Boolean(msg.connected);
@@ -94,20 +83,30 @@ function connectToBridge() {
           }
         }
       } catch (err) {
-        console.error("[Miruro RPC Offscreen] Message parse error:", err);
+        console.error("[Stream RPC Offscreen] Message parse error:", err);
       }
     };
 
     ws.onerror = () => {
-      failAttempt();
+      // Let onclose handle reconnect
     };
 
     ws.onclose = () => {
-      console.log("[Miruro RPC Offscreen] Bridge connection closed.");
-      failAttempt();
+      console.log("[Stream RPC Offscreen] Bridge connection closed. Reconnecting in 2.5s...");
+      if (ws === socket) {
+        socket = null;
+        isReady = false;
+        isConnecting = false;
+        setConnectionState(false, null, null);
+      }
+      scheduleReconnect();
     };
   } catch (err) {
-    failAttempt();
+    socket = null;
+    isReady = false;
+    isConnecting = false;
+    setConnectionState(false, null, null);
+    scheduleReconnect();
   }
 }
 
@@ -122,7 +121,7 @@ function sendSetActivity(activity) {
   pendingActivity = activity;
 
   if (!socket || !isReady || socket.readyState !== WebSocket.OPEN) {
-    console.log("[Miruro RPC Offscreen] Activity queued; waiting for Discord bridge connection.");
+    console.log("[Stream RPC Offscreen] Activity queued; waiting for Discord bridge connection.");
     return;
   }
 
@@ -137,9 +136,9 @@ function sendSetActivity(activity) {
 
   try {
     socket.send(JSON.stringify(payload));
-    console.log("[Miruro RPC Offscreen] Dispatched SET_ACTIVITY to Bridge:", activity ? (activity.name || activity.details) : "CLEARED");
+    console.log("[Stream RPC Offscreen] Dispatched SET_ACTIVITY to Bridge:", activity ? (activity.name || activity.details) : "CLEARED");
   } catch (err) {
-    console.error("[Miruro RPC Offscreen] Failed to send SET_ACTIVITY:", err);
+    console.error("[Stream RPC Offscreen] Failed to send SET_ACTIVITY:", err);
   }
 }
 
@@ -156,7 +155,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       socket.send(JSON.stringify({ cmd: "SET_CONFIG", clientId: message.clientId }));
     }
     sendResponse({ success: true });
-  } else if (message.type === "GET_DISCORD_STATUS") {
+  } else if (
+    message.type === "GET_DISCORD_STATUS" ||
+    message.type === "CHECK_DISCORD_STATUS" ||
+    message.type === "CHECK_BRIDGE_NOW"
+  ) {
+    // If not connected and not currently connecting, probe immediately
+    if (!isReady && !isConnecting) {
+      connectToBridge();
+    }
     sendResponse({
       connected: isReady,
       port: BRIDGE_PORT,
