@@ -1,24 +1,44 @@
 /**
- * Miruro Discord Rich Presence — Popup Controller
- * Manages live Discord connection status, activity preview, preferences, and custom Discord IDs.
+ * Miruro & VidBox Discord Rich Presence — Popup Controller
+ * Manages dual-service tabs (Miruro / VidBox), previews, preferences, and custom Discord IDs.
  */
 
 const DEFAULT_APP_ID = "1563994278965813358";
 
 document.addEventListener("DOMContentLoaded", async () => {
+  // Tab Elements
+  const tabBtnMiruro = document.getElementById("tabBtnMiruro");
+  const tabBtnVidbox = document.getElementById("tabBtnVidbox");
+  const panelMiruro = document.getElementById("panelMiruro");
+  const panelVidbox = document.getElementById("panelVidbox");
+
+  // Connection Status Elements
   const statusDot = document.getElementById("statusDot");
   const statusText = document.getElementById("statusText");
-  const previewPoster = document.getElementById("previewPoster");
-  const previewTitle = document.getElementById("previewTitle");
-  const previewDesc = document.getElementById("previewDesc");
-  const previewBadge = document.getElementById("previewBadge");
 
-  const masterSwitch = document.getElementById("masterSwitch");
-  const optBrowsing = document.getElementById("optBrowsing");
-  const optTimestamps = document.getElementById("optTimestamps");
-  const optCover = document.getElementById("optCover");
-  const optButtons = document.getElementById("optButtons");
+  // Miruro Panel Elements
+  const miruroPreviewPoster = document.getElementById("miruroPreviewPoster");
+  const miruroPreviewTitle = document.getElementById("miruroPreviewTitle");
+  const miruroPreviewDesc = document.getElementById("miruroPreviewDesc");
+  const miruroPreviewBadge = document.getElementById("miruroPreviewBadge");
+  const miruroMasterSwitch = document.getElementById("miruroMasterSwitch");
+  const miruroOptBrowsing = document.getElementById("miruroOptBrowsing");
+  const miruroOptTimestamps = document.getElementById("miruroOptTimestamps");
+  const miruroOptCover = document.getElementById("miruroOptCover");
+  const miruroOptButtons = document.getElementById("miruroOptButtons");
 
+  // VidBox Panel Elements
+  const vidboxPreviewPoster = document.getElementById("vidboxPreviewPoster");
+  const vidboxPreviewTitle = document.getElementById("vidboxPreviewTitle");
+  const vidboxPreviewDesc = document.getElementById("vidboxPreviewDesc");
+  const vidboxPreviewBadge = document.getElementById("vidboxPreviewBadge");
+  const vidboxMasterSwitch = document.getElementById("vidboxMasterSwitch");
+  const vidboxOptBrowsing = document.getElementById("vidboxOptBrowsing");
+  const vidboxOptTimestamps = document.getElementById("vidboxOptTimestamps");
+  const vidboxOptCover = document.getElementById("vidboxOptCover");
+  const vidboxOptButtons = document.getElementById("vidboxOptButtons");
+
+  // Discord Configuration Elements
   const inputUserId = document.getElementById("inputUserId");
   const inputAppId = document.getElementById("inputAppId");
   const btnSaveConfig = document.getElementById("btnSaveConfig");
@@ -27,65 +47,142 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Load preferences and state from storage
   const data = await chrome.storage.local.get([
+    "activeTab",
+    // Miruro
+    "miruro_enabled",
+    "miruro_browsing",
+    "miruro_timestamps",
+    "miruro_cover",
+    "miruro_buttons",
+    "miruro_lastPresence",
+    // VidBox
+    "vidbox_enabled",
+    "vidbox_browsing",
+    "vidbox_timestamps",
+    "vidbox_cover",
+    "vidbox_buttons",
+    "vidbox_lastPresence",
+    // Legacy Miruro fallbacks
     "enabled",
     "browsing",
     "timestamps",
     "cover",
     "buttons",
+    "lastPresence",
+    // Shared
     "discordUserId",
     "discordAppId",
     "discordConnected",
     "discordPort",
-    "discordUser",
-    "lastPresence"
+    "discordUser"
   ]);
 
-  masterSwitch.checked = data.enabled !== false;
-  optBrowsing.checked = data.browsing !== false;
-  optTimestamps.checked = data.timestamps !== false;
-  optCover.checked = data.cover !== false;
-  optButtons.checked = data.buttons !== false;
+  // Tab activation
+  const activeTab = data.activeTab || "miruro";
+  switchTab(activeTab);
 
+  tabBtnMiruro.addEventListener("click", () => switchTab("miruro"));
+  tabBtnVidbox.addEventListener("click", () => switchTab("vidbox"));
+
+  function switchTab(tab) {
+    if (tab === "vidbox") {
+      tabBtnVidbox.classList.add("active");
+      tabBtnMiruro.classList.remove("active");
+      panelVidbox.classList.add("active");
+      panelMiruro.classList.remove("active");
+      chrome.storage.local.set({ activeTab: "vidbox" });
+    } else {
+      tabBtnMiruro.classList.add("active");
+      tabBtnVidbox.classList.remove("active");
+      panelMiruro.classList.add("active");
+      panelVidbox.classList.remove("active");
+      chrome.storage.local.set({ activeTab: "miruro" });
+    }
+  }
+
+  // Populate Miruro controls
+  const miruroEnabled = data.miruro_enabled !== undefined ? data.miruro_enabled : (data.enabled !== false);
+  miruroMasterSwitch.checked = miruroEnabled;
+  miruroOptBrowsing.checked = data.miruro_browsing !== undefined ? data.miruro_browsing : (data.browsing !== false);
+  miruroOptTimestamps.checked = data.miruro_timestamps !== undefined ? data.miruro_timestamps : (data.timestamps !== false);
+  miruroOptCover.checked = data.miruro_cover !== undefined ? data.miruro_cover : (data.cover !== false);
+  miruroOptButtons.checked = data.miruro_buttons !== undefined ? data.miruro_buttons : (data.buttons !== false);
+
+  // Populate VidBox controls
+  const vidboxEnabled = data.vidbox_enabled !== undefined ? data.vidbox_enabled : true;
+  vidboxMasterSwitch.checked = vidboxEnabled;
+  vidboxOptBrowsing.checked = data.vidbox_browsing !== undefined ? data.vidbox_browsing : true;
+  vidboxOptTimestamps.checked = data.vidbox_timestamps !== undefined ? data.vidbox_timestamps : true;
+  vidboxOptCover.checked = data.vidbox_cover !== undefined ? data.vidbox_cover : true;
+  vidboxOptButtons.checked = data.vidbox_buttons !== undefined ? data.vidbox_buttons : true;
+
+  // Discord Configuration
   inputUserId.value = data.discordUserId || "";
   inputAppId.value = data.discordAppId || "";
 
-  // Show connecting state initially if not connected yet
+  // Initial connection & previews
   updateDiscordStatus(Boolean(data.discordConnected), data.discordUser, !data.discordConnected);
-  updatePreview(data.lastPresence, data.enabled !== false);
+  updateMiruroPreview(data.miruro_lastPresence || (data.lastPresence?.name?.includes("Miruro") ? data.lastPresence : null), miruroEnabled);
+  updateVidboxPreview(data.vidbox_lastPresence, vidboxEnabled);
 
-  // Ping background service worker to ensure offscreen document is alive & get status
+  // Ping background service worker to ensure offscreen is alive & sync status
   chrome.runtime.sendMessage({ type: "CHECK_DISCORD_STATUS" }, (res) => {
     if (res && res.connected) {
       updateDiscordStatus(true, res.user);
     }
   });
 
-  // Settings change handlers (auto-save toggles)
-  masterSwitch.addEventListener("change", () => {
-    const isEnabled = masterSwitch.checked;
-    chrome.storage.local.set({ enabled: isEnabled });
-    chrome.storage.local.get(["lastPresence"], (res) => {
-      updatePreview(res.lastPresence, isEnabled);
+  // ── Miruro Event Listeners ─────────────────────────────────
+  miruroMasterSwitch.addEventListener("change", () => {
+    const isEnabled = miruroMasterSwitch.checked;
+    chrome.storage.local.set({ miruro_enabled: isEnabled, enabled: isEnabled });
+    chrome.storage.local.get(["miruro_lastPresence"], (res) => {
+      updateMiruroPreview(res.miruro_lastPresence, isEnabled);
     });
   });
 
-  optBrowsing.addEventListener("change", () => {
-    chrome.storage.local.set({ browsing: optBrowsing.checked });
+  miruroOptBrowsing.addEventListener("change", () => {
+    chrome.storage.local.set({ miruro_browsing: miruroOptBrowsing.checked, browsing: miruroOptBrowsing.checked });
   });
 
-  optTimestamps.addEventListener("change", () => {
-    chrome.storage.local.set({ timestamps: optTimestamps.checked });
+  miruroOptTimestamps.addEventListener("change", () => {
+    chrome.storage.local.set({ miruro_timestamps: miruroOptTimestamps.checked, timestamps: miruroOptTimestamps.checked });
   });
 
-  optCover.addEventListener("change", () => {
-    chrome.storage.local.set({ cover: optCover.checked });
+  miruroOptCover.addEventListener("change", () => {
+    chrome.storage.local.set({ miruro_cover: miruroOptCover.checked, cover: miruroOptCover.checked });
   });
 
-  optButtons.addEventListener("change", () => {
-    chrome.storage.local.set({ buttons: optButtons.checked });
+  miruroOptButtons.addEventListener("change", () => {
+    chrome.storage.local.set({ miruro_buttons: miruroOptButtons.checked, buttons: miruroOptButtons.checked });
   });
 
-  // Save Custom Discord IDs
+  // ── VidBox Event Listeners ─────────────────────────────────
+  vidboxMasterSwitch.addEventListener("change", () => {
+    const isEnabled = vidboxMasterSwitch.checked;
+    chrome.storage.local.set({ vidbox_enabled: isEnabled });
+    chrome.storage.local.get(["vidbox_lastPresence"], (res) => {
+      updateVidboxPreview(res.vidbox_lastPresence, isEnabled);
+    });
+  });
+
+  vidboxOptBrowsing.addEventListener("change", () => {
+    chrome.storage.local.set({ vidbox_browsing: vidboxOptBrowsing.checked });
+  });
+
+  vidboxOptTimestamps.addEventListener("change", () => {
+    chrome.storage.local.set({ vidbox_timestamps: vidboxOptTimestamps.checked });
+  });
+
+  vidboxOptCover.addEventListener("change", () => {
+    chrome.storage.local.set({ vidbox_cover: vidboxOptCover.checked });
+  });
+
+  vidboxOptButtons.addEventListener("change", () => {
+    chrome.storage.local.set({ vidbox_buttons: vidboxOptButtons.checked });
+  });
+
+  // ── Save Custom Discord IDs ────────────────────────────────
   btnSaveConfig.addEventListener("click", () => {
     const userId = inputUserId.value.trim().replace(/\D/g, "");
     const appId = inputAppId.value.trim().replace(/\D/g, "");
@@ -97,14 +194,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       discordUserId: userId,
       discordAppId: appId
     }, () => {
-      // Notify background / bridge of updated Application ID
       chrome.runtime.sendMessage({
         type: "UPDATE_CONFIG",
         clientId: appId || DEFAULT_APP_ID,
         userId: userId
       }).catch(() => {});
 
-      // Request tabs to resync presence with new button configuration
       chrome.runtime.sendMessage({ type: "FORCE_PRESENCE_SYNC" }).catch(() => {});
 
       saveFeedback.textContent = "Settings saved!";
@@ -132,7 +227,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       chrome.runtime.sendMessage({ type: "FORCE_PRESENCE_SYNC" }).catch(() => {});
 
-      saveFeedback.textContent = "Reset to default Miruro App ID!";
+      saveFeedback.textContent = "Reset to default Application ID!";
       saveFeedback.style.display = "block";
       setTimeout(() => {
         saveFeedback.style.display = "none";
@@ -148,9 +243,14 @@ document.addEventListener("DOMContentLoaded", async () => {
           updateDiscordStatus(Boolean(res.discordConnected), res.discordUser);
         });
       }
-      if (changes.lastPresence) {
-        chrome.storage.local.get(["enabled"], (res) => {
-          updatePreview(changes.lastPresence.newValue, res.enabled !== false);
+      if (changes.miruro_lastPresence || changes.miruro_enabled) {
+        chrome.storage.local.get(["miruro_lastPresence", "miruro_enabled"], (res) => {
+          updateMiruroPreview(res.miruro_lastPresence, res.miruro_enabled !== false);
+        });
+      }
+      if (changes.vidbox_lastPresence || changes.vidbox_enabled) {
+        chrome.storage.local.get(["vidbox_lastPresence", "vidbox_enabled"], (res) => {
+          updateVidboxPreview(res.vidbox_lastPresence, res.vidbox_enabled !== false);
         });
       }
     }
@@ -179,47 +279,91 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  function updatePreview(presence, enabled) {
+  function updateMiruroPreview(presence, enabled) {
     if (!enabled) {
-      previewPoster.src = "icons/icon-48.png";
-      previewTitle.textContent = "Extension Disabled";
-      previewDesc.textContent = "Toggle switch above to enable";
-      previewBadge.className = "preview-badge badge-idle";
-      previewBadge.textContent = "DISABLED";
+      miruroPreviewPoster.src = "icons/icon-48.png";
+      miruroPreviewTitle.textContent = "Miruro Presence Disabled";
+      miruroPreviewDesc.textContent = "Toggle switch above to enable";
+      miruroPreviewBadge.className = "preview-badge badge-idle";
+      miruroPreviewBadge.textContent = "DISABLED";
       return;
     }
 
     if (!presence) {
-      previewPoster.src = "icons/icon-48.png";
-      previewTitle.textContent = "No Active Media";
-      previewDesc.textContent = "Open Miruro to start";
-      previewBadge.className = "preview-badge badge-idle";
-      previewBadge.textContent = "IDLE";
+      miruroPreviewPoster.src = "icons/icon-48.png";
+      miruroPreviewTitle.textContent = "No Active Anime";
+      miruroPreviewDesc.textContent = "Open Miruro to start";
+      miruroPreviewBadge.className = "preview-badge badge-idle";
+      miruroPreviewBadge.textContent = "IDLE";
       return;
     }
 
-    previewPoster.src = presence.assets?.large_image || "icons/icon-48.png";
-    previewTitle.textContent = presence.details || presence.name || "Miruro";
-    previewDesc.textContent = presence.state || "Active";
+    miruroPreviewPoster.src = presence.assets?.large_image || "icons/icon-48.png";
+    miruroPreviewTitle.textContent = presence.details || presence.name || "Miruro";
+    miruroPreviewDesc.textContent = presence.state || "Active";
 
-    previewBadge.className = "preview-badge";
+    miruroPreviewBadge.className = "preview-badge";
     const smallText = presence.assets?.small_text?.toLowerCase();
 
     if (smallText === "playing") {
-      previewBadge.classList.add("badge-playing");
-      previewBadge.textContent = "PLAYING";
+      miruroPreviewBadge.classList.add("badge-playing");
+      miruroPreviewBadge.textContent = "PLAYING";
     } else if (smallText === "paused") {
-      previewBadge.classList.add("badge-paused");
-      previewBadge.textContent = "PAUSED";
+      miruroPreviewBadge.classList.add("badge-paused");
+      miruroPreviewBadge.textContent = "PAUSED";
     } else if (
       presence.details?.toLowerCase().includes("browsing") ||
       presence.details?.toLowerCase().includes("viewing")
     ) {
-      previewBadge.classList.add("badge-browsing");
-      previewBadge.textContent = "BROWSING";
+      miruroPreviewBadge.classList.add("badge-browsing");
+      miruroPreviewBadge.textContent = "BROWSING";
     } else {
-      previewBadge.classList.add("badge-idle");
-      previewBadge.textContent = "ACTIVE";
+      miruroPreviewBadge.classList.add("badge-idle");
+      miruroPreviewBadge.textContent = "ACTIVE";
+    }
+  }
+
+  function updateVidboxPreview(presence, enabled) {
+    if (!enabled) {
+      vidboxPreviewPoster.src = "icons/vidbox-icon.png";
+      vidboxPreviewTitle.textContent = "VidBox Presence Disabled";
+      vidboxPreviewDesc.textContent = "Toggle switch above to enable";
+      vidboxPreviewBadge.className = "preview-badge badge-idle";
+      vidboxPreviewBadge.textContent = "DISABLED";
+      return;
+    }
+
+    if (!presence) {
+      vidboxPreviewPoster.src = "icons/vidbox-icon.png";
+      vidboxPreviewTitle.textContent = "No Active Movie / TV";
+      vidboxPreviewDesc.textContent = "Open VidBox to start";
+      vidboxPreviewBadge.className = "preview-badge badge-idle";
+      vidboxPreviewBadge.textContent = "IDLE";
+      return;
+    }
+
+    vidboxPreviewPoster.src = presence.assets?.large_image || "icons/vidbox-icon.png";
+    vidboxPreviewTitle.textContent = presence.details || presence.name || "VidBox";
+    vidboxPreviewDesc.textContent = presence.state || "Active";
+
+    vidboxPreviewBadge.className = "preview-badge";
+    const smallText = presence.assets?.small_text?.toLowerCase();
+
+    if (smallText === "playing") {
+      vidboxPreviewBadge.classList.add("badge-playing");
+      vidboxPreviewBadge.textContent = "PLAYING";
+    } else if (smallText === "paused") {
+      vidboxPreviewBadge.classList.add("badge-paused");
+      vidboxPreviewBadge.textContent = "PAUSED";
+    } else if (
+      presence.details?.toLowerCase().includes("browsing") ||
+      presence.details?.toLowerCase().includes("viewing")
+    ) {
+      vidboxPreviewBadge.classList.add("badge-browsing");
+      vidboxPreviewBadge.textContent = "BROWSING";
+    } else {
+      vidboxPreviewBadge.classList.add("badge-idle");
+      vidboxPreviewBadge.textContent = "ACTIVE";
     }
   }
 });

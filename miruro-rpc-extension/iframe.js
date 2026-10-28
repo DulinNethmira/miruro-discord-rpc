@@ -1,7 +1,7 @@
 /**
- * Miruro Discord Rich Presence — Video iFrame Bridge
+ * Miruro & VidBox Discord Rich Presence — Video iFrame Bridge
  * Injected into embedded player frames (<all_urls>, all_frames: true)
- * Immediately transmits <video> playback events to content.js and background.js.
+ * Immediately transmits <video> playback events to content scripts and background.js.
  */
 
 (function () {
@@ -32,6 +32,10 @@
     // 1. Send to background.js
     try {
       chrome.runtime.sendMessage({
+        type: "VIDEO_STATE",
+        data: data
+      }).catch(() => {});
+      chrome.runtime.sendMessage({
         type: "MIRURO_VIDEO_STATE",
         data: data
       }).catch(() => {});
@@ -39,6 +43,10 @@
 
     // 2. Direct postMessage to parent frame
     try {
+      window.parent.postMessage({
+        type: "VIDEO_STATE",
+        data: data
+      }, "*");
       window.parent.postMessage({
         type: "MIRURO_VIDEO_STATE",
         data: data

@@ -2,7 +2,7 @@ process.on("uncaughtException", (err) => console.error("[Uncaught Exception]", e
 process.on("unhandledRejection", (reason) => console.error("[Unhandled Rejection]", reason));
 process.on("exit", (code) => console.log("[Bridge Exit] with code:", code));
 /**
- * Miruro Discord Rich Presence — Local IPC Bridge
+ * Miruro & VidBox Discord Rich Presence — Local IPC Bridge
  * Pipes Chrome Extension RPC payloads directly into Discord's Windows Named Pipe (\.\pipe\discord-ipc-0).
  * Zero external npm dependencies required.
  * Bound strictly to localhost loopback (127.0.0.1).
@@ -190,7 +190,7 @@ const server = http.createServer((req, res) => {
     "Access-Control-Allow-Origin": "*"
   });
   res.end(JSON.stringify({
-    service: "Miruro Discord RPC Bridge",
+    service: "Miruro & VidBox Discord RPC Bridge",
     status: discordUser ? "connected" : "waiting_for_discord",
     user: discordUser ? discordUser.username : null,
     clientId: activeClientId,
@@ -365,7 +365,7 @@ function broadcastToExtension(msg) {
 // Bind strictly to local loopback (127.0.0.1)
 server.listen(WS_PORT, "127.0.0.1", () => {
   console.log("==================================================");
-  console.log("  Miruro Discord Rich Presence — IPC Bridge       ");
+  console.log("  Miruro & VidBox Discord RPC — IPC Bridge        ");
   console.log(`  Listening on: ws://127.0.0.1:${WS_PORT} (Localhost) `);
   console.log(`  Application ID: ${activeClientId}      `);
   console.log("==================================================");

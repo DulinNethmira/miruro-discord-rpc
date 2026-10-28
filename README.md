@@ -1,11 +1,12 @@
 <div align="center">
 
-  <img src="miruro-rpc-extension/icons/icon-128.png" alt="Miruro Discord RPC Logo" width="96" height="96" style="border-radius: 20px;">
+  <img src="miruro-rpc-extension/icons/icon-128.png" alt="Stream Discord RPC Logo" width="96" height="96" style="border-radius: 20px;">
 
-  # Miruro Discord Rich Presence
+  # Stream Discord Rich Presence
+  ### Miruro (Anime) & VidBox (Movies & TV Series)
 
-  **A modern, standalone Manifest V3 Chrome Extension & lightweight Discord RPC bridge for Miruro.**  
-  *Live anime covers, dynamic titles, real-time video sync, and customizable Discord profiles.*
+  **A modern, standalone Manifest V3 Chrome Extension & lightweight Discord RPC bridge for Miruro and VidBox.**  
+  *Live posters, dynamic titles, season/episode detection, real-time video sync, and customizable Discord profiles.*
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
   [![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-informational.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
@@ -18,16 +19,31 @@
 
 ## ✨ Features
 
-- 🎨 **Dynamic High-Resolution Cover Art**: Scrapes anime poster images directly from the DOM and falls back to AniList's GraphQL API for high-res cover art.
-- 🏷️ **Dynamic Header Titles**: Shows `Watching [Anime Title]` in your Discord activity header rather than generic site titles.
-- ⚡ **Instant Real-Time Video Sync**: Attaches direct event listeners to `<video>` players (including embedded cross-origin iframes) for 0ms latency on play, pause, and seek.
-- ⏯️ **Play & Pause Sub-Icons**: Displays live animated state icons with accurate remaining time calculation.
-- 🔗 **Interactive Action Buttons**:
-  - `Watch Episode` / `View on Miruro` buttons that take your friends straight to what you're watching.
-  - Optional `Discord Profile` button linking to your profile.
-- 🛡️ **Zero External Servers & 100% Privacy**: Communicates entirely over local IPC (`\\.\pipe\discord-ipc-0`) on your machine. No telemetry, no external accounts, no cloud dependencies.
-- ⚙️ **Custom User & App ID Support**: Customizable Discord User ID and Discord Developer Application ID directly in the popup UI.
-- 🚀 **1-Click Silent Background Auto-Start**: Includes a 1-click Windows installer that runs the companion bridge silently in the background on PC boot with zero console windows.
+### 🎬 Dual Platform Support
+- **Miruro (Anime)**: `miruro.tv`, `miruro.cx`, `miruro.online`
+- **VidBox (Movies & TV Series)**: `vidbox.wtf`, `vidbox.to`, `vidbox.cc`, `vidbox.ag`, `vidbox.me`
+- **Tabbed Extension Popup**: Dedicated tab panels for **Miruro** and **VidBox** with independent toggles, preferences, and live activity previews.
+- **Smart Arbitration**: Active video playback always takes priority; seamless switching when navigating or changing browser tabs.
+
+### 🎨 High-Resolution Posters & Dynamic Metadata
+- **Miruro**: High-res anime covers directly from DOM with automatic AniList GraphQL API resolution.
+- **VidBox**: High-res TMDB posters, release years, TV show season/episode numbers and titles (`S{X} E{Y} - {Title}`).
+- **Dynamic Header Titles**: Shows `Watching [Anime Title]` or `Watching [Movie/Show Title]` directly in your Discord activity header.
+
+### ⚡ Instant Video Sync & Status Sub-Icons
+- Attaches direct event listeners to `<video>` players (including embedded cross-origin player iframes like VidLink, VidRift, 2Embed, etc.).
+- Animated **Play** and **Pause** sub-icons with live remaining time calculation.
+
+### 🔗 Interactive Action Buttons
+- `Watch on VidBox` / `Watch Episode` / `View on Miruro` buttons that take your friends straight to what you're watching.
+- Optional `Discord Profile` button linking to your profile.
+
+### 🛡️ Zero External Servers & 100% Privacy
+- Communicates entirely over local IPC (`\\.\pipe\discord-ipc-0`) on your machine.
+- No telemetry, no external accounts, no cloud dependencies.
+
+### 🚀 1-Click Silent Background Auto-Start
+- Includes a 1-click Windows installer (`setup-bridge.bat`) that runs the companion bridge silently in the background on PC boot with zero console windows.
 
 ---
 
@@ -35,12 +51,12 @@
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  Watching Miruro                                       │
+│  Watching Lupin                                        │
 │  ┌──────┐                                              │
-│  │ COVER│  Frieren: Beyond Journey's End               │
-│  │  ART │  Episode 28 - The End of the Journey         │
-│  │      │  ▶ 14:32 remaining                           │
-│  └──────┘  [ Watch Episode ]  [ Discord Profile ]      │
+│  │ TMDB │  Lupin                                       │
+│  │ POSTER  S1 E1 - Chapter 1                           │
+│  │      │  ▶ 38:12 remaining                           │
+│  └──────┘  [ Watch on VidBox ]  [ Discord Profile ]    │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -63,7 +79,7 @@
 
 ### Step 2: Start the Local Discord Bridge
 
-Because Chrome restricts browser extensions from directly opening Windows Named Pipes (`\\.\pipe\discord-ipc-0`), a tiny 35-line Node.js loopback bridge relays the activity from Chrome into Discord desktop.
+Because Chrome restricts browser extensions from directly opening Windows Named Pipes (`\\.\pipe\discord-ipc-0`), a tiny zero-dependency Node.js loopback bridge relays the activity from Chrome into Discord desktop.
 
 **Option A (Recommended — Silent Auto-Start)**:
 - Double-click **`setup-bridge.bat`**.
@@ -80,17 +96,23 @@ Because Chrome restricts browser extensions from directly opening Windows Named 
 
 ## ⚙️ Configuration & Customization
 
-Click the **Miruro RPC** icon in your Chrome toolbar to open the control panel:
+Click the extension icon in your Chrome toolbar to open the control panel:
 
-| Setting | Description | Default |
-| :--- | :--- | :---: |
-| **Enable Rich Presence** | Master switch to pause or resume presence | `ON` |
-| **Show Browsing Status** | Displays when you are browsing Miruro | `ON` |
-| **Show Video Timestamps** | Shows elapsed/remaining episode duration | `ON` |
-| **Show Anime Cover Art** | Fetches and displays high-res anime posters | `ON` |
-| **Show Action Buttons** | Adds clickable "Watch Episode" button | `ON` |
-| **Your Discord User ID** | Adds a clickable "Discord Profile" button | *Optional* |
-| **Discord Application ID** | Override with your own custom Discord Developer App | *Official App* |
+- **Miruro Tab**:
+  - Enable Miruro Presence
+  - Show Browsing Status
+  - Show Video Timestamps
+  - Show Anime Cover Art
+  - Show Watch Episode Button
+- **VidBox Tab**:
+  - Enable VidBox Presence
+  - Show Browsing Status
+  - Show Video Timestamps
+  - Show Movie/TV Poster
+  - Show Watch on VidBox Button
+- **Discord Settings (Shared)**:
+  - **Your Discord User ID**: Adds a clickable "Discord Profile" button to your activity card.
+  - **Discord Application ID**: Override with your own custom Discord Developer Application ID.
 
 ---
 
@@ -98,22 +120,12 @@ Click the **Miruro RPC** icon in your Chrome toolbar to open the control panel:
 
 ```mermaid
 flowchart LR
-    A[Miruro Website\nmiruro.cx / miruro.tv] -->|DOM & Video Events| B[Content Script\ncontent.js + iframe.js]
-    B -->|chrome.runtime| C[Background Worker\nbackground.js]
-    C -->|Internal DOM| D[Offscreen Document\noffscreen.js]
-    D -->|ws://127.0.0.1:19890| E[Local IPC Bridge\nbridge.js]
-    E -->|Windows Named Pipe| F[Discord Desktop Client\n\\\\.\\pipe\\discord-ipc-0]
+    A["Miruro / VidBox Website\n(miruro.cx / vidbox.wtf)"] -->|DOM & Video Events| B["Content Scripts\n(content.js / vidbox-content.js + iframe.js)"]
+    B -->|chrome.runtime| C["Background Worker\n(background.js)"]
+    C -->|Internal DOM| D["Offscreen Document\n(offscreen.js)"]
+    D -->|ws://127.0.0.1:19890| E["Local IPC Bridge\n(bridge.js)"]
+    E -->|Windows Named Pipe| F["Discord Desktop Client\n(\\\\.\\pipe\\discord-ipc-0)"]
 ```
-
-- **Manifest V3 Compliant**: Uses Chrome's `offscreen` API to maintain an active WebSocket connection without being killed by service worker sleep cycles.
-- **Pure Node.js**: Zero external npm dependencies. Uses standard `net`, `http`, and `crypto` modules built into Node.js.
-
----
-
-## 📦 Alternative: PreMiD Presence
-
-If you prefer using [PreMiD](https://premid.app), a ready-to-use presence package is also included:
-- **`miruro-premid.zip`**: Contains the updated `metadata.json`, `presence.js`, and `iframe.js` with full support for dynamic AniList covers, clean anime titles, and live video listeners.
 
 ---
 
@@ -133,5 +145,5 @@ Distributed under the **MIT License**. See [`LICENSE`](LICENSE) for details.
 ---
 
 <div align="center">
-  <sub>Built with ❤️ for anime lovers on Miruro.</sub>
+  <sub>Built with ❤️ for anime and movie lovers.</sub>
 </div>

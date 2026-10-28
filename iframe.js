@@ -1,101 +1,118 @@
-/* ─────────────────────────────────────────────────────────
- *  Miruro — PreMiD iFrame Bridge
- *
- *  Runs inside the video player iframe context.
- *  Attaches live event listeners directly to <video> to send
- *  instant playback state updates to presence.js.
- * ───────────────────────────────────────────────────────── */
-
-const iframe = new iFrame();
-
-let boundVideo = null;
-
 /**
- * Dispatch current video playback state to presence.js
+ * Miruro & VidBox Discord Rich Presence — Video iFrame Bridge
+ * Injected into embedded player frames (<all_urls>, all_frames: true)
+ * Immediately transmits <video> playback events to content scripts and background.js.
  */
-function sendVideoData() {
-  const video = document.querySelector("video");
-  if (video) {
-    iframe.send({
+
+(function () {
+  // Only execute inside child iframe contexts
+  if (window === window.top) return;
+
+  let boundVideo = null;
+  let syncInterval = null;
+
+  function sendVideoData() {
+    const video = document.querySelector("video");
+    if (!video) return;
+
+    const data = {
       currentTime: Number(video.currentTime) || 0,
       duration: Number(video.duration) || 0,
-      paused: Boolean(video.paused),
-    });
-  }
-}
+      paused: Boolean(video.paused)
+    };
 
-/**
- * Attach event listeners directly to the <video> element for instant sync.
- * Fires the exact millisecond the user plays, pauses, seeks, or changes speed.
- */
-function bindVideoEvents(video) {
-  if (!video || boundVideo === video) return;
+    // Manage 1-second live playback position sync interval
+    if (!video.paused && !syncInterval) {
+      syncInterval = setInterval(sendVideoData, 1000);
+    } else if (video.paused && syncInterval) {
+      clearInterval(syncInterval);
+      syncInterval = null;
+    }
 
-  // Detach old listeners if the video element was replaced
-  if (boundVideo) {
+    // 1. Send to background.js
     try {
-      boundVideo.removeEventListener("play", sendVideoData);
-      boundVideo.removeEventListener("pause", sendVideoData);
-      boundVideo.removeEventListener("seeked", sendVideoData);
-      boundVideo.removeEventListener("loadedmetadata", sendVideoData);
-      boundVideo.removeEventListener("ratechange", sendVideoData);
+      chrome.runtime.sendMessage({
+        type: "VIDEO_STATE",
+        data: data
+      }).catch(() => {});
+      chrome.runtime.sendMessage({
+        type: "MIRURO_VIDEO_STATE",
+        data: data
+      }).catch(() => {});
+    } catch (_) {}
+
+    // 2. Direct postMessage to parent frame
+    try {
+      window.parent.postMessage({
+        type: "VIDEO_STATE",
+        data: data
+      }, "*");
+      window.parent.postMessage({
+        type: "MIRURO_VIDEO_STATE",
+        data: data
+      }, "*");
     } catch (_) {}
   }
 
-  boundVideo = video;
-  video.addEventListener("play", sendVideoData);
-  video.addEventListener("pause", sendVideoData);
-  video.addEventListener("seeked", sendVideoData);
-  video.addEventListener("loadedmetadata", sendVideoData);
-  video.addEventListener("ratechange", sendVideoData);
-}
+  function bindVideoEvents(video) {
+    if (!video || boundVideo === video) return;
 
-/**
- * Find and bind the active <video> element and send the current state
- */
-function checkAndBind() {
-  const video = document.querySelector("video");
-  if (video) {
-    bindVideoEvents(video);
+    if (boundVideo) {
+      try {
+        boundVideo.removeEventListener("play", sendVideoData);
+        boundVideo.removeEventListener("pause", sendVideoData);
+        boundVideo.removeEventListener("seeked", sendVideoData);
+        boundVideo.removeEventListener("loadedmetadata", sendVideoData);
+        boundVideo.removeEventListener("ratechange", sendVideoData);
+      } catch (_) {}
+    }
+
+    boundVideo = video;
+    video.addEventListener("play", sendVideoData);
+    video.addEventListener("pause", sendVideoData);
+    video.addEventListener("seeked", sendVideoData);
+    video.addEventListener("loadedmetadata", sendVideoData);
+    video.addEventListener("ratechange", sendVideoData);
+
     sendVideoData();
   }
-}
 
-// 1. Initial check immediately on script execution
-checkAndBind();
-
-// 2. PreMiD standard polling hook
-iframe.on("UpdateData", async () => {
-  checkAndBind();
-});
-
-// 3. MutationObserver: catch dynamically injected or replaced <video> elements
-const observerTarget = document.body || document.documentElement;
-if (observerTarget) {
-  const observer = new MutationObserver(() => {
+  function checkAndBind() {
     const video = document.querySelector("video");
-    if (video && video !== boundVideo) {
+    if (video) {
       bindVideoEvents(video);
-      sendVideoData();
     }
-  });
+  }
 
-  observer.observe(observerTarget, {
-    childList: true,
-    subtree: true,
-  });
-} else {
-  document.addEventListener("DOMContentLoaded", () => {
-    checkAndBind();
-    if (document.body) {
-      const observer = new MutationObserver(() => {
-        const video = document.querySelector("video");
-        if (video && video !== boundVideo) {
-          bindVideoEvents(video);
-          sendVideoData();
-        }
-      });
-      observer.observe(document.body, { childList: true, subtree: true });
-    }
-  });
-}
+  // Initial check
+  checkAndBind();
+
+  // Watch for dynamically mounted video players
+  const target = document.body || document.documentElement;
+  if (target) {
+    const observer = new MutationObserver(() => {
+      const video = document.querySelector("video");
+      if (video && video !== boundVideo) {
+        bindVideoEvents(video);
+      }
+    });
+
+    observer.observe(target, {
+      childList: true,
+      subtree: true
+    });
+  } else {
+    document.addEventListener("DOMContentLoaded", () => {
+      checkAndBind();
+      if (document.body) {
+        const observer = new MutationObserver(() => {
+          const video = document.querySelector("video");
+          if (video && video !== boundVideo) {
+            bindVideoEvents(video);
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      }
+    });
+  }
+})();

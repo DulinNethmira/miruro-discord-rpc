@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Miruro Discord RPC</title>
+  <title>Miruro & VidBox Discord RPC</title>
   <style>
     * {
       box-sizing: border-box;
@@ -12,8 +12,8 @@
     }
 
     body {
-      width: 330px;
-      max-height: 580px;
+      width: 336px;
+      max-height: 585px;
       overflow-y: auto;
       overflow-x: hidden;
       background-color: #0f0f13;
@@ -21,7 +21,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       font-size: 13px;
       line-height: 1.4;
-      padding: 14px;
+      padding: 13px;
     }
 
     /* Scrollbar styling */
@@ -41,8 +41,8 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
-      padding-bottom: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
       border-bottom: 1px solid #1f1f29;
     }
 
@@ -59,7 +59,7 @@
     }
 
     .brand h1 {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       color: #ffffff;
       letter-spacing: -0.2px;
@@ -71,47 +71,71 @@
       background: #1e1e28;
       padding: 1px 5px;
       border-radius: 4px;
-      margin-left: 4px;
+      margin-left: 2px;
     }
 
-    /* ── Connection Badge ──────────────────────────────── */
-    .connection-status {
+    /* ── Tab Switcher Bar ──────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      background: #151520;
+      border: 1px solid #222232;
+      border-radius: 8px;
+      padding: 3px;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .tab-btn {
+      flex: 1;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
-      background: #16161f;
       padding: 6px 10px;
+      background: transparent;
+      border: none;
       border-radius: 6px;
-      border: 1px solid #242432;
-      margin-bottom: 12px;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
     }
 
-    .status-dot {
-      width: 8px;
-      height: 8px;
+    .tab-btn:hover {
+      color: #f1f5f9;
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      background: #242436;
+      color: #ffffff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+    }
+
+    .tab-dot {
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background: #f59e0b;
-      box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
-      flex-shrink: 0;
     }
 
-    .status-dot.connected {
-      background: #22c55e;
-      box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+    .dot-miruro {
+      background: #8A2BE2;
+      box-shadow: 0 0 6px rgba(138, 43, 226, 0.6);
     }
 
-    .status-dot.disconnected {
+    .dot-vidbox {
       background: #ef4444;
-      box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
     }
 
-    .status-text {
-      font-size: 11px;
-      font-weight: 500;
-      color: #cbd5e1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    /* ── Tab Panels ────────────────────────────────────── */
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
     }
 
     /* ── Preview Card ──────────────────────────────────── */
@@ -119,10 +143,10 @@
       background: #171722;
       border: 1px solid #262638;
       border-radius: 8px;
-      padding: 10px;
+      padding: 9px;
       display: flex;
       gap: 10px;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
     }
 
@@ -206,10 +230,10 @@
       align-items: center;
       justify-content: space-between;
       background: #181824;
-      padding: 9px 12px;
+      padding: 8px 12px;
       border-radius: 8px;
       border: 1px solid #29293d;
-      margin-bottom: 10px;
+      margin-bottom: 9px;
     }
 
     .master-label {
@@ -259,6 +283,11 @@
       background-color: #8A2BE2;
     }
 
+    .slider-vidbox input:checked + .slider,
+    input:checked + .slider-red {
+      background-color: #ef4444;
+    }
+
     input:checked + .slider:before {
       transform: translateX(16px);
     }
@@ -269,7 +298,7 @@
       flex-direction: column;
       gap: 7px;
       background: #14141c;
-      padding: 10px;
+      padding: 9px 11px;
       border-radius: 8px;
       border: 1px solid #212130;
       margin-bottom: 10px;
@@ -291,12 +320,56 @@
       cursor: pointer;
     }
 
+    .setting-item-vidbox input[type="checkbox"] {
+      accent-color: #ef4444;
+    }
+
+    /* ── Connection Badge ──────────────────────────────── */
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #16161f;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #242432;
+      margin-bottom: 10px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f59e0b;
+      box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+      flex-shrink: 0;
+    }
+
+    .status-dot.connected {
+      background: #22c55e;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+    }
+
+    .status-dot.disconnected {
+      background: #ef4444;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+    }
+
+    .status-text {
+      font-size: 11px;
+      font-weight: 500;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     /* ── Custom Discord ID Config ──────────────────────── */
     .config-box {
       background: #14141c;
       border: 1px solid #212130;
       border-radius: 8px;
-      padding: 10px 12px;
+      padding: 9px 11px;
       margin-bottom: 10px;
     }
 
@@ -306,14 +379,14 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: #a78bfa;
-      margin-bottom: 8px;
+      margin-bottom: 7px;
       display: flex;
       align-items: center;
       justify-content: space-between;
     }
 
     .field-group {
-      margin-bottom: 8px;
+      margin-bottom: 7px;
     }
 
     .field-label {
@@ -329,7 +402,7 @@
       background: #0d0d12;
       border: 1px solid #2c2c3e;
       border-radius: 5px;
-      padding: 6px 8px;
+      padding: 5px 8px;
       color: #f1f5f9;
       font-size: 11px;
       font-family: inherit;
@@ -398,11 +471,11 @@
       background: #111118;
       border: 1px solid #1e1e2c;
       border-radius: 6px;
-      padding: 8px 10px;
+      padding: 7px 9px;
       font-size: 10px;
       color: #94a3b8;
       margin-bottom: 10px;
-      line-height: 1.4;
+      line-height: 1.35;
     }
 
     .bridge-tip strong {
@@ -422,7 +495,7 @@
       font-size: 10px;
       color: #64748b;
       text-align: center;
-      padding-top: 4px;
+      padding-top: 2px;
     }
   </style>
 </head>
@@ -430,62 +503,119 @@
   <!-- Header -->
   <div class="header">
     <div class="brand">
-      <img src="icons/icon-48.png" alt="Miruro Logo">
-      <h1>Miruro RPC</h1>
-      <span>v1.1.0</span>
+      <img src="icons/icon-48.png" alt="RPC Logo">
+      <h1>Stream Discord RPC</h1>
+      <span>v1.2.0</span>
     </div>
   </div>
 
-  <!-- Connection Status -->
+  <!-- Service Tabs Switcher -->
+  <div class="tab-bar">
+    <button class="tab-btn active" id="tabBtnMiruro" data-tab="miruro">
+      <span class="tab-dot dot-miruro"></span>
+      Miruro (Anime)
+    </button>
+    <button class="tab-btn" id="tabBtnVidbox" data-tab="vidbox">
+      <span class="tab-dot dot-vidbox"></span>
+      VidBox (Movies/TV)
+    </button>
+  </div>
+
+  <!-- Connection Status (Shared) -->
   <div class="connection-status">
     <div class="status-dot" id="statusDot"></div>
     <div class="status-text" id="statusText">Connecting to Bridge...</div>
   </div>
 
-  <!-- Activity Preview Card -->
-  <div class="preview-card">
-    <img src="icons/icon-48.png" alt="Cover" class="preview-poster" id="previewPoster">
-    <div class="preview-info">
-      <div class="preview-title" id="previewTitle">No Active Media</div>
-      <div class="preview-desc" id="previewDesc">Open Miruro to start</div>
-      <div class="preview-badge badge-idle" id="previewBadge">IDLE</div>
+  <!-- ══════════════ TAB 1: MIRURO PANEL ══════════════ -->
+  <div class="tab-panel active" id="panelMiruro">
+    <!-- Activity Preview Card -->
+    <div class="preview-card">
+      <img src="icons/icon-48.png" alt="Cover" class="preview-poster" id="miruroPreviewPoster">
+      <div class="preview-info">
+        <div class="preview-title" id="miruroPreviewTitle">No Active Media</div>
+        <div class="preview-desc" id="miruroPreviewDesc">Open Miruro to start</div>
+        <div class="preview-badge badge-idle" id="miruroPreviewBadge">IDLE</div>
+      </div>
+    </div>
+
+    <!-- Master Switch -->
+    <div class="master-switch-row">
+      <span class="master-label">Enable Miruro Presence</span>
+      <label class="switch">
+        <input type="checkbox" id="miruroMasterSwitch" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <!-- Preferences Checklist -->
+    <div class="settings-list">
+      <label class="setting-item">
+        <input type="checkbox" id="miruroOptBrowsing" checked>
+        <span>Show Browsing Status</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="miruroOptTimestamps" checked>
+        <span>Show Video Timestamps</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="miruroOptCover" checked>
+        <span>Show Anime Cover Art</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="miruroOptButtons" checked>
+        <span>Show Watch Episode Button</span>
+      </label>
     </div>
   </div>
 
-  <!-- Master Enable Switch -->
-  <div class="master-switch-row">
-    <span class="master-label">Enable Rich Presence</span>
-    <label class="switch">
-      <input type="checkbox" id="masterSwitch" checked>
-      <span class="slider"></span>
-    </label>
+  <!-- ══════════════ TAB 2: VIDBOX PANEL ══════════════ -->
+  <div class="tab-panel" id="panelVidbox">
+    <!-- Activity Preview Card -->
+    <div class="preview-card">
+      <img src="icons/vidbox-icon.png" alt="Cover" class="preview-poster" id="vidboxPreviewPoster">
+      <div class="preview-info">
+        <div class="preview-title" id="vidboxPreviewTitle">No Active Media</div>
+        <div class="preview-desc" id="vidboxPreviewDesc">Open VidBox to start</div>
+        <div class="preview-badge badge-idle" id="vidboxPreviewBadge">IDLE</div>
+      </div>
+    </div>
+
+    <!-- Master Switch -->
+    <div class="master-switch-row">
+      <span class="master-label">Enable VidBox Presence</span>
+      <label class="switch">
+        <input type="checkbox" id="vidboxMasterSwitch" checked>
+        <span class="slider slider-red"></span>
+      </label>
+    </div>
+
+    <!-- Preferences Checklist -->
+    <div class="settings-list setting-item-vidbox">
+      <label class="setting-item">
+        <input type="checkbox" id="vidboxOptBrowsing" checked>
+        <span>Show Browsing Status</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="vidboxOptTimestamps" checked>
+        <span>Show Video Timestamps</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="vidboxOptCover" checked>
+        <span>Show Movie/TV Poster</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="vidboxOptButtons" checked>
+        <span>Show Watch on VidBox Button</span>
+      </label>
+    </div>
   </div>
 
-  <!-- Preferences Checklist -->
-  <div class="settings-list">
-    <label class="setting-item">
-      <input type="checkbox" id="optBrowsing" checked>
-      <span>Show Browsing Status</span>
-    </label>
-    <label class="setting-item">
-      <input type="checkbox" id="optTimestamps" checked>
-      <span>Show Video Timestamps</span>
-    </label>
-    <label class="setting-item">
-      <input type="checkbox" id="optCover" checked>
-      <span>Show Anime Cover Art</span>
-    </label>
-    <label class="setting-item">
-      <input type="checkbox" id="optButtons" checked>
-      <span>Show Watch Episode Button</span>
-    </label>
-  </div>
-
-  <!-- User Discord Configuration -->
+  <!-- User Discord Configuration (Shared) -->
   <div class="config-box">
     <div class="config-title">
       <span>Discord Settings</span>
-      <span style="font-size: 9px; color: #64748b; text-transform: none;">Public & Custom</span>
+      <span style="font-size: 9px; color: #64748b; text-transform: none;">Both Services</span>
     </div>
 
     <!-- Discord User ID (Optional) -->
@@ -499,7 +629,7 @@
     <div class="field-group">
       <label class="field-label" for="inputAppId">Discord Application ID (Optional):</label>
       <input type="text" id="inputAppId" class="text-input" placeholder="Default: 1563994278965813358" maxlength="21">
-      <div class="field-hint">Leave blank to use the official Miruro Rich Presence app.</div>
+      <div class="field-hint">Leave blank to use the official Rich Presence app.</div>
     </div>
 
     <div class="btn-row">
@@ -511,7 +641,7 @@
 
   <!-- Silent Bridge Companion Tip -->
   <div class="bridge-tip">
-    <strong>Background Auto-Start:</strong> Run <span class="code-pill">setup-bridge.bat</span> once to start the bridge silently with Windows boot (no open windows required).
+    <strong>Background Auto-Start:</strong> Run <span class="code-pill">setup-bridge.bat</span> once to start the bridge silently with Windows boot.
   </div>
 
   <!-- Footer -->

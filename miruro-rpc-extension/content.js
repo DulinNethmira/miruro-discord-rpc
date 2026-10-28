@@ -24,6 +24,11 @@
   async function getSettings() {
     try {
       const res = await chrome.storage.local.get([
+        "miruro_enabled",
+        "miruro_browsing",
+        "miruro_timestamps",
+        "miruro_cover",
+        "miruro_buttons",
         "enabled",
         "browsing",
         "timestamps",
@@ -33,11 +38,11 @@
         "discordAppId"
       ]);
       return {
-        enabled: res.enabled !== false,
-        browsing: res.browsing !== false,
-        timestamps: res.timestamps !== false,
-        cover: res.cover !== false,
-        buttons: res.buttons !== false,
+        enabled: res.miruro_enabled !== undefined ? res.miruro_enabled : (res.enabled !== false),
+        browsing: res.miruro_browsing !== undefined ? res.miruro_browsing : (res.browsing !== false),
+        timestamps: res.miruro_timestamps !== undefined ? res.miruro_timestamps : (res.timestamps !== false),
+        cover: res.miruro_cover !== undefined ? res.miruro_cover : (res.cover !== false),
+        buttons: res.miruro_buttons !== undefined ? res.miruro_buttons : (res.buttons !== false),
         discordUserId: res.discordUserId ? String(res.discordUserId).trim() : null,
         discordAppId: res.discordAppId ? String(res.discordAppId).trim() : null
       };
@@ -572,7 +577,11 @@
 
   /* ── Listen for Video State from iFrames & Background ──── */
   window.addEventListener("message", (event) => {
-    if (event.data && event.data.type === "MIRURO_VIDEO_STATE" && event.data.data) {
+    if (
+      event.data &&
+      (event.data.type === "MIRURO_VIDEO_STATE" || event.data.type === "VIDEO_STATE") &&
+      event.data.data
+    ) {
       const data = event.data.data;
       const stateChanged =
         data.paused !== videoData.paused ||
@@ -586,7 +595,10 @@
   });
 
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === "MIRURO_VIDEO_STATE" && message.data) {
+    if (
+      (message.type === "MIRURO_VIDEO_STATE" || message.type === "VIDEO_STATE") &&
+      message.data
+    ) {
       const data = message.data;
       const stateChanged =
         data.paused !== videoData.paused ||
