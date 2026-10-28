@@ -7,22 +7,24 @@ echo ========================================================
 echo.
 
 set "STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-set "STARTUP_BAT=%STARTUP_FOLDER%\MiruroDiscordBridge.bat"
-set "STARTUP_VBS=%STARTUP_FOLDER%\MiruroDiscordBridge.vbs"
 
 :: 1. Remove from Windows Startup folder
-if exist "%STARTUP_BAT%" (
-    del "%STARTUP_BAT%"
-    echo [OK] Removed auto-start batch file from Windows Startup.
+if exist "%STARTUP_FOLDER%\MiruroBridge.vbs" (
+    del "%STARTUP_FOLDER%\MiruroBridge.vbs"
+    echo [OK] Removed MiruroBridge.vbs from Windows Startup.
 )
-if exist "%STARTUP_VBS%" (
-    del "%STARTUP_VBS%"
-    echo [OK] Removed legacy VBS from Windows Startup.
+if exist "%STARTUP_FOLDER%\MiruroDiscordBridge.bat" (
+    del "%STARTUP_FOLDER%\MiruroDiscordBridge.bat"
+    echo [OK] Removed MiruroDiscordBridge.bat from Windows Startup.
+)
+if exist "%STARTUP_FOLDER%\MiruroDiscordBridge.vbs" (
+    del "%STARTUP_FOLDER%\MiruroDiscordBridge.vbs"
+    echo [OK] Removed MiruroDiscordBridge.vbs from Windows Startup.
 )
 
 :: 2. Terminate running bridge background processes
-echo [OK] Stopping running Miruro Bridge background processes...
-powershell -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*bridge.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" 2>nul
+echo [OK] Stopping running Miruro Bridge processes...
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*bridge.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
 
 echo.
 echo ========================================================

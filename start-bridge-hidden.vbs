@@ -1,3 +1,3 @@
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.CurrentDirectory = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
-WshShell.Run "node bridge.js", 0, False
+WshShell.CurrentDirectory = "C:\Users\PC\Documents\Miruro Discord RPC"
+WshShell.Run "cmd.exe /c node bridge.js", 0, False

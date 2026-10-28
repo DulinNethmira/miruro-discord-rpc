@@ -10,49 +10,54 @@ echo.
 :: 1. Check if Node.js is installed
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [ERROR] Node.js is not found on your system!
-    echo Please install Node.js from https://nodejs.org or via terminal:
+    echo [ERROR] Node.js was not found on your system!
+    echo Please install Node.js from: https://nodejs.org
+    echo Or install via PowerShell / Windows Terminal:
     echo   winget install OpenJS.NodeJS
     echo.
     pause
     exit /b 1
 )
 
-:: 2. Resolve script directories
+:: 2. Resolve paths (strip trailing slash)
 set "SCRIPT_DIR=%~dp0"
-set "BRIDGE_JS=%SCRIPT_DIR%bridge.js"
+if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 set "STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
-set "STARTUP_BAT=%STARTUP_FOLDER%\MiruroDiscordBridge.bat"
+set "STARTUP_VBS=%STARTUP_FOLDER%\MiruroBridge.vbs"
 
-echo [1/3] Located bridge at:
-echo       "%BRIDGE_JS%"
+echo [1/3] Located bridge directory:
+echo       "%SCRIPT_DIR%"
 echo.
 
-:: 3. Generate silent startup runner in Windows Startup folder
+:: 3. Stop any existing bridge instance
+powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*bridge.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }" >nul 2>&1
+
+:: 4. Write clean silent auto-start runner to Windows Startup folder
 echo [2/3] Registering silent background auto-start with Windows...
 (
-    echo @echo off
-    echo powershell.exe -WindowStyle Hidden -Command "Start-Process node -ArgumentList '"""%BRIDGE_JS%"""' -WindowStyle Hidden -WorkingDirectory '"""%SCRIPT_DIR:~0,-1%"""'"
-) > "%STARTUP_BAT%"
+    echo Set WshShell = CreateObject("WScript.Shell"^)
+    echo WshShell.CurrentDirectory = "%SCRIPT_DIR%"
+    echo WshShell.Run "cmd.exe /c node bridge.js", 0, False
+) > "%STARTUP_VBS%"
 
-if exist "%STARTUP_BAT%" (
-    echo       Installed: "%STARTUP_BAT%"
+if exist "%STARTUP_VBS%" (
+    echo       Registered: "%STARTUP_VBS%"
 ) else (
     echo [ERROR] Could not write to Startup folder.
     pause
     exit /b 1
 )
 
-:: 4. Launch the bridge silently right now
+:: 5. Launch the bridge silently right now
 echo.
 echo [3/3] Launching Miruro Bridge silently in background...
-powershell.exe -WindowStyle Hidden -Command "Start-Process node -ArgumentList '"""%BRIDGE_JS%"""' -WindowStyle Hidden -WorkingDirectory '"""%SCRIPT_DIR:~0,-1%"""'"
+start "" wscript.exe "%STARTUP_VBS%"
 
 echo.
 echo ========================================================
 echo   SUCCESS! Miruro Discord Bridge is now ACTIVE!         
 echo ========================================================
-echo   - Running silently in background (no open CMD window).
+echo   - Running silently in background (0 open CMD windows).
 echo   - Automatically starts when your computer boots up.   
 echo   - Open Miruro in Chrome and your Discord status is live!
 echo.
