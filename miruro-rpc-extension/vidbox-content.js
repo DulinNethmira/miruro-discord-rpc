@@ -63,16 +63,158 @@
     }
   }
 
-  /* ── Extract TMDB Media ID & Type from URL ─────────────── */
+  /* ── Extract Cookie ────────────────────────────────────── */
+  function getCookie(name) {
+    try {
+      const match = document.cookie.match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
+      return match ? decodeURIComponent(match[1]) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /* ── Extract TMDB Media ID & Type ──────────────────────── */
   function getMediaInfo() {
     const { pathname } = document.location;
-    const match = pathname.match(/\/(movie|tv)\/(\d+)/i);
-    if (match) {
+
+    // 1. Direct info path: /movie/1400940 or /tv/96677 or /drama/123
+    const directMatch = pathname.match(/\/(movie|tv|drama)\/(\d+)/i);
+    if (directMatch) {
+      const info = {
+        type: directMatch[1].toLowerCase() === "drama" ? "tv" : directMatch[1].toLowerCase(),
+        id: directMatch[2],
+        isWatchPage: false
+      };
+      try {
+        sessionStorage.setItem("vidbox:current_media", JSON.stringify(info));
+      } catch (_) {}
+      return info;
+    }
+
+    // 2. Watch pages: /watch/movie, /watch/tv, /watch/anime, /watch/drama
+    if (pathname.startsWith("/watch/")) {
+      const watchType = pathname.includes("movie") ? "movie" : "tv";
+
+      // 2a. Check vidbox-watch-return-to cookie (e.g. "/movie/1400940" or "/tv/96677?season=1&episode=2")
+      const returnTo = getCookie("vidbox-watch-return-to");
+      if (returnTo) {
+        const returnMatch = returnTo.match(/\/(movie|tv|drama)\/(\d+)/i);
+        if (returnMatch) {
+          const type = returnMatch[1].toLowerCase() === "drama" ? "tv" : returnMatch[1].toLowerCase();
+          const id = returnMatch[2];
+          const queryPart = returnTo.split("?")[1];
+          const params = new URLSearchParams(queryPart || "");
+          const season = params.get("season") ? parseInt(params.get("season"), 10) : undefined;
+          const episode = params.get("episode") ? parseInt(params.get("episode"), 10) : undefined;
+          const info = { type, id, isWatchPage: true, season, episode };
+          try {
+            sessionStorage.setItem("vidbox:current_media", JSON.stringify(info));
+          } catch (_) {}
+          return info;
+        }
+      }
+
+      // 2b. Check sessionStorage (cached when previously on info page in this tab)
+      try {
+        const savedRaw = sessionStorage.getItem("vidbox:current_media");
+        if (savedRaw) {
+          const saved = JSON.parse(savedRaw);
+          if (saved && saved.id) {
+            return {
+              type: saved.type || watchType,
+              id: String(saved.id),
+              isWatchPage: true,
+              season: saved.season,
+              episode: saved.episode
+            };
+          }
+        }
+      } catch (_) {}
+
+      // 2c. Check DOM download / info links (e.g. https://moviesdl.cc/p/info.html?id=1400940&type=movie)
+      const dlLink = document.querySelector('a[href*="id="][href*="type="], a[href*="moviesdl.cc"]');
+      if (dlLink && dlLink.href) {
+        try {
+          const u = new URL(dlLink.href);
+          const id = u.searchParams.get("id");
+          const type = u.searchParams.get("type");
+          if (id) {
+            const info = {
+              type: type === "movie" ? "movie" : "tv",
+              id: String(id),
+              isWatchPage: true
+            };
+            try {
+              sessionStorage.setItem("vidbox:current_media", JSON.stringify(info));
+            } catch (_) {}
+            return info;
+          }
+        } catch (_) {}
+      }
+
+      // 2d. Check DOM links pointing to /movie/:id or /tv/:id
+      const backLink = document.querySelector('a[href*="/movie/"], a[href*="/tv/"]');
+      if (backLink && backLink.href) {
+        const linkMatch = backLink.href.match(/\/(movie|tv)\/(\d+)/i);
+        if (linkMatch) {
+          const info = {
+            type: linkMatch[1].toLowerCase(),
+            id: linkMatch[2],
+            isWatchPage: true
+          };
+          try {
+            sessionStorage.setItem("vidbox:current_media", JSON.stringify(info));
+          } catch (_) {}
+          return info;
+        }
+      }
+
+      // 2e. Check localStorage "media-storage" or "vidbox-continue-watching"
+      try {
+        const mediaStorageRaw = localStorage.getItem("media-storage");
+        if (mediaStorageRaw) {
+          const parsed = JSON.parse(mediaStorageRaw);
+          const history = parsed?.state?.history;
+          if (Array.isArray(history) && history.length > 0) {
+            const item = history.find((h) => h && (!watchType || h.mediaType === watchType)) || history[0];
+            if (item && item.mediaId) {
+              return {
+                type: item.mediaType || watchType,
+                id: String(item.mediaId),
+                isWatchPage: true,
+                season: item.season,
+                episode: item.episode
+              };
+            }
+          }
+        }
+
+        const continueWatchingRaw = localStorage.getItem("vidbox-continue-watching");
+        if (continueWatchingRaw) {
+          const cwList = JSON.parse(continueWatchingRaw);
+          if (Array.isArray(cwList) && cwList.length > 0) {
+            const item = cwList.find((c) => c && (!watchType || c.mediaType === watchType)) || cwList[0];
+            if (item && (item.mediaId || item.id)) {
+              return {
+                type: item.mediaType || watchType,
+                id: String(item.mediaId || item.id),
+                isWatchPage: true,
+                season: item.season,
+                episode: item.episode
+              };
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 2f. Fallback watch page with unknown ID
       return {
-        type: match[1].toLowerCase(),
-        id: match[2]
+        type: watchType,
+        id: null,
+        isWatchPage: true
       };
     }
+
     return null;
   }
 
@@ -84,8 +226,8 @@
     // Strip site suffixes: " | Vidbox", " - Vidbox", " · Vidbox", etc.
     clean = clean.replace(/\s*[-–—·|/]\s*Vidbox.*$/i, "").trim();
 
-    // Strip leading "Watch " or "Watching "
-    clean = clean.replace(/^(?:Watch(?:ing)?)\s+/i, "").trim();
+    // Strip leading "Now Watching:", "Now Watching", "Watch ", or "Watching "
+    clean = clean.replace(/^(?:Now\s+Watching:?|Watch(?:ing)?)\s+/i, "").trim();
 
     // Strip year in parenthesis: "(2024)"
     clean = clean.replace(/\s*\(\d{4}\)$/, "").trim();
@@ -96,26 +238,25 @@
   /* ── Extract Title from Document ───────────────────────── */
   function getTitleFromDocument(mediaInfo) {
     // 1. From TMDB cache if available
-    if (mediaInfo && metaCache[mediaInfo.id]) {
+    if (mediaInfo && mediaInfo.id && metaCache[mediaInfo.id]) {
       return metaCache[mediaInfo.id].title;
     }
 
-    // 2. Primary heading (h1)
+    // 2. Primary heading (h1) — on watch page: "Now Watching: Clayface"
     const h1 = document.querySelector("h1");
     if (h1) {
-      const clone = h1.cloneNode(true);
-      clone.querySelectorAll("span, p, div, small, button, badge, a, svg").forEach((el) => el.remove());
-      const cleanedH1 = cleanTitle(clone.textContent || h1.textContent);
+      const cleanedH1 = cleanTitle(h1.textContent || "");
       if (
         cleanedH1 &&
         cleanedH1.toLowerCase() !== "vidbox" &&
-        !cleanedH1.toLowerCase().includes("ultimate streaming guide")
+        !cleanedH1.toLowerCase().includes("ultimate streaming guide") &&
+        !cleanedH1.toLowerCase().includes("episodes")
       ) {
         return cleanedH1.length > 128 ? cleanedH1.slice(0, 125) + "..." : cleanedH1;
       }
     }
 
-    // 3. Cleaned document.title
+    // 3. Cleaned document.title — e.g. "Watch Clayface - Vidbox"
     const cleanedDocTitle = cleanTitle(document.title || "");
     if (
       cleanedDocTitle &&
@@ -125,11 +266,11 @@
       return cleanedDocTitle.length > 128 ? cleanedDocTitle.slice(0, 125) + "..." : cleanedDocTitle;
     }
 
-    // 4. Meta og:title
+    // 4. Meta og:title — e.g. "Watch Clayface "
     const ogTitle = document.querySelector('meta[property="og:title"]')?.getAttribute("content");
     if (ogTitle) {
       const cleanedOg = cleanTitle(ogTitle);
-      if (cleanedOg && cleanedOg.toLowerCase() !== "vidbox") {
+      if (cleanedOg && cleanedOg.toLowerCase() !== "vidbox" && !cleanedOg.toLowerCase().includes("ultimate streaming guide")) {
         return cleanedOg.length > 128 ? cleanedOg.slice(0, 125) + "..." : cleanedOg;
       }
     }
@@ -138,7 +279,9 @@
   }
 
   /* ── Extract Season Number for TV ───────────────────────── */
-  function getSeasonNumber() {
+  function getSeasonNumber(mediaInfo) {
+    if (mediaInfo && mediaInfo.season) return mediaInfo.season;
+
     // 1. Query param: ?season=1 or ?s=1
     const params = new URLSearchParams(document.location.search);
     const seasonParam = params.get("season") || params.get("s");
@@ -157,9 +300,9 @@
   }
 
   /* ── Extract Episode Info for TV ────────────────────────── */
-  function getEpisodeInfo(mediaId, seasonNum) {
+  function getEpisodeInfo(mediaId, seasonNum, mediaInfo) {
     const params = new URLSearchParams(document.location.search);
-    let episodeNum = params.get("episode") || params.get("ep") || params.get("e");
+    let episodeNum = mediaInfo?.episode || params.get("episode") || params.get("ep") || params.get("e");
     let episodeTitle = null;
 
     // 1. Check DOM for active episode card (highlighted with pulse or gradient)
@@ -194,11 +337,13 @@
     }
 
     // 3. Check TMDB Season Cache for episode title
-    const seasonKey = `${mediaId}_s${seasonNum}`;
-    if (episodeNum && !episodeTitle && seasonCache[seasonKey]) {
-      const epData = seasonCache[seasonKey].find((e) => e.episode_number === parseInt(episodeNum, 10));
-      if (epData && epData.name) {
-        episodeTitle = epData.name;
+    if (mediaId) {
+      const seasonKey = `${mediaId}_s${seasonNum}`;
+      if (episodeNum && !episodeTitle && seasonCache[seasonKey]) {
+        const epData = seasonCache[seasonKey].find((e) => e.episode_number === parseInt(episodeNum, 10));
+        if (epData && epData.name) {
+          episodeTitle = epData.name;
+        }
       }
     }
 
@@ -209,22 +354,72 @@
     };
   }
 
+  /* ── Fallback TMDB Title Search (When on /watch without ID) ─ */
+  async function searchTmdb(title, type) {
+    if (!title || title === "Movie" || title === "TV Show" || title === "VidBox") return;
+    const cacheKey = `search_${type}_${title.toLowerCase()}`;
+    if (pendingFetches.has(cacheKey)) return;
+    pendingFetches.add(cacheKey);
+
+    try {
+      const endpoint = `https://api.themoviedb.org/3/search/${type}?query=${encodeURIComponent(title)}&language=en-US&api_key=${TMDB_API_KEY}`;
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      if (data && data.results && data.results.length > 0) {
+        const match = data.results[0];
+        const resolvedId = String(match.id);
+        const resolvedTitle = match.title || match.name || title;
+        const posterPath = match.poster_path || match.backdrop_path;
+        const year = (match.release_date || match.first_air_date || "").slice(0, 4);
+
+        if (posterPath) {
+          posterCache[resolvedId] = `https://image.tmdb.org/t/p/w500${posterPath}`;
+        }
+        metaCache[resolvedId] = {
+          title: resolvedTitle,
+          year: year || null,
+          overview: match.overview || null
+        };
+
+        try {
+          sessionStorage.setItem("vidbox:current_media", JSON.stringify({
+            type,
+            id: resolvedId,
+            title: resolvedTitle,
+            isWatchPage: true
+          }));
+        } catch (_) {}
+
+        updatePresence();
+      }
+    } catch (_) {
+      // Fail safely
+    } finally {
+      pendingFetches.delete(cacheKey);
+    }
+  }
+
   /* ── Extract Poster Image ──────────────────────────────── */
   function getPoster(mediaInfo) {
     if (!mediaInfo) return DEFAULT_LOGO;
 
     // 1. Memory cache
-    if (posterCache[mediaInfo.id]) {
+    if (mediaInfo.id && posterCache[mediaInfo.id]) {
       return posterCache[mediaInfo.id];
     }
 
-    // 2. Fetch TMDB details in background
-    fetchTmdbDetails(mediaInfo);
+    // 2. Fetch TMDB details or search by title in background
+    if (mediaInfo.id) {
+      fetchTmdbDetails(mediaInfo);
+    } else {
+      const title = getTitleFromDocument(mediaInfo);
+      searchTmdb(title, mediaInfo.type);
+    }
 
-    // 3. Meta og:image
+    // 3. Meta og:image (ignoring generic site previews)
     const ogImage = document.querySelector('meta[property="og:image"]')?.getAttribute("content");
-    if (ogImage && ogImage.startsWith("http")) {
-      posterCache[mediaInfo.id] = ogImage;
+    if (ogImage && ogImage.startsWith("http") && !ogImage.includes("og-image.webp")) {
+      if (mediaInfo.id) posterCache[mediaInfo.id] = ogImage;
       return ogImage;
     }
 
@@ -233,7 +428,7 @@
     if (tmdbImg) {
       const src = tmdbImg.currentSrc || tmdbImg.src;
       if (src && src.startsWith("http")) {
-        posterCache[mediaInfo.id] = src;
+        if (mediaInfo.id) posterCache[mediaInfo.id] = src;
         return src;
       }
     }
@@ -243,7 +438,7 @@
 
   /* ── Fetch TMDB Metadata ───────────────────────────────── */
   async function fetchTmdbDetails(mediaInfo) {
-    if (!mediaInfo || pendingFetches.has(mediaInfo.id)) return;
+    if (!mediaInfo || !mediaInfo.id || pendingFetches.has(mediaInfo.id)) return;
     pendingFetches.add(mediaInfo.id);
 
     try {
@@ -279,7 +474,7 @@
 
       // If TV, also fetch Season 1 episodes
       if (mediaInfo.type === "tv") {
-        const seasonNum = getSeasonNumber();
+        const seasonNum = getSeasonNumber(mediaInfo);
         const seasonRes = await fetch(
           `https://api.themoviedb.org/3/tv/${mediaInfo.id}/season/${seasonNum}?language=en-US&api_key=${TMDB_API_KEY}`
         );
@@ -359,7 +554,7 @@
     if (mediaInfo && mediaInfo.type === "movie") {
       const title = getTitleFromDocument(mediaInfo);
       const poster = getPoster(mediaInfo);
-      const cached = metaCache[mediaInfo.id];
+      const cached = mediaInfo.id ? metaCache[mediaInfo.id] : null;
       const year = cached?.year || null;
 
       activity.name = title;
@@ -369,6 +564,11 @@
         activity.state = year ? `${year} • Watching Movie` : "Watching Movie";
       } else if (activeVideo && activeVideo.paused && activeVideo.duration > 0) {
         activity.state = year ? `${year} • Paused` : "Paused";
+      } else if (mediaInfo.isWatchPage) {
+        // User clicked Play and is on /watch/movie
+        activity.state = year ? `${year} • Watching Movie` : "Watching Movie";
+        activity.assets.small_image = PLAY_ICON;
+        activity.assets.small_text = "Playing";
       } else {
         if (!settings.browsing) {
           chrome.runtime.sendMessage({ type: "VIDBOX_CLEAR_PRESENCE" }).catch(() => {});
@@ -398,7 +598,10 @@
       }
 
       if (settings.buttons) {
-        activity.buttons = [{ label: "Watch on VidBox", url: href }];
+        const watchUrl = mediaInfo.id
+          ? `https://vidbox.wtf/movie/${mediaInfo.id}`
+          : href;
+        activity.buttons = [{ label: "Watch on VidBox", url: watchUrl }];
         if (settings.discordUserId && /^\d{17,21}$/.test(settings.discordUserId)) {
           activity.buttons.push({
             label: "Discord Profile",
@@ -411,8 +614,8 @@
     } else if (mediaInfo && mediaInfo.type === "tv") {
       const title = getTitleFromDocument(mediaInfo);
       const poster = getPoster(mediaInfo);
-      const seasonNum = getSeasonNumber();
-      const epInfo = getEpisodeInfo(mediaInfo.id, seasonNum);
+      const seasonNum = getSeasonNumber(mediaInfo);
+      const epInfo = getEpisodeInfo(mediaInfo.id, seasonNum, mediaInfo);
 
       activity.name = title;
       activity.details = title;
@@ -426,12 +629,17 @@
       }
 
       if (!activeVideo || (activeVideo.paused && activeVideo.duration === 0)) {
-        if (!settings.browsing) {
-          chrome.runtime.sendMessage({ type: "VIDBOX_CLEAR_PRESENCE" }).catch(() => {});
-          return;
-        }
-        if (!epInfo.title && epInfo.episode === 1) {
-          activity.state = "Viewing TV Series Details";
+        if (!mediaInfo.isWatchPage) {
+          if (!settings.browsing) {
+            chrome.runtime.sendMessage({ type: "VIDBOX_CLEAR_PRESENCE" }).catch(() => {});
+            return;
+          }
+          if (!epInfo.title && epInfo.episode === 1) {
+            activity.state = "Viewing TV Series Details";
+          }
+        } else {
+          activity.assets.small_image = PLAY_ICON;
+          activity.assets.small_text = "Playing";
         }
       }
 
@@ -456,7 +664,10 @@
       }
 
       if (settings.buttons) {
-        activity.buttons = [{ label: "Watch on VidBox", url: href }];
+        const watchUrl = mediaInfo.id
+          ? `https://vidbox.wtf/tv/${mediaInfo.id}`
+          : href;
+        activity.buttons = [{ label: "Watch on VidBox", url: watchUrl }];
         if (settings.discordUserId && /^\d{17,21}$/.test(settings.discordUserId)) {
           activity.buttons.push({
             label: "Discord Profile",
@@ -599,6 +810,7 @@
   function onLocationChange() {
     lastHref = document.location.href;
     lastTitle = document.title;
+    videoData = { currentTime: 0, duration: 0, paused: true };
     checkAndBindMainVideo();
     updatePresence();
   }

@@ -355,15 +355,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     vidboxPreviewBadge.className = "preview-badge";
     const smallText = presence.assets?.small_text?.toLowerCase();
 
-    if (smallText === "playing") {
+    if (
+      smallText === "playing" ||
+      presence.state?.toLowerCase().includes("watching")
+    ) {
       vidboxPreviewBadge.classList.add("badge-playing");
       vidboxPreviewBadge.textContent = "PLAYING";
-    } else if (smallText === "paused") {
+    } else if (smallText === "paused" || presence.state?.toLowerCase().includes("paused")) {
       vidboxPreviewBadge.classList.add("badge-paused");
       vidboxPreviewBadge.textContent = "PAUSED";
     } else if (
       presence.details?.toLowerCase().includes("browsing") ||
-      presence.details?.toLowerCase().includes("viewing")
+      presence.details?.toLowerCase().includes("viewing") ||
+      presence.state?.toLowerCase().includes("details")
     ) {
       vidboxPreviewBadge.classList.add("badge-browsing");
       vidboxPreviewBadge.textContent = "BROWSING";
