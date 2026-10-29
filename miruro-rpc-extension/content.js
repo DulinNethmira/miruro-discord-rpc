@@ -15,6 +15,8 @@
 
   const coverCache = {};
   const titleCache = {};
+  const rewatchCache = {};
+  let hasLoggedTracker = false;
   const pendingFetches = new Set();
   let videoData = { currentTime: 0, duration: 0, paused: true };
   let boundMainVideo = null;
@@ -81,6 +83,128 @@
     if (segmentMatch) return segmentMatch[1];
 
     return null;
+  }
+
+  /* ── Detect User's Connected Tracker (AniList or MAL) ── */
+  function getConnectedTracker() {
+    try {
+      const provider = window.localStorage.getItem("miruro:auth:provider") || "";
+      const anilistToken = window.localStorage.getItem("miruro:auth:token");
+      const malToken = window.localStorage.getItem("miruro:auth:mal-token");
+
+      if (provider === "mal" && malToken) {
+        return { name: "MyAnimeList", provider: "mal", token: malToken };
+      }
+      if (anilistToken) {
+        return { name: "AniList", provider: "anilist", token: anilistToken };
+      }
+      if (malToken) {
+        return { name: "MyAnimeList", provider: "mal", token: malToken };
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /* ── Check if Anime is in Rewatching / Repeating status ── */
+  function isAnimeRewatching(anilistId) {
+    if (!anilistId) return false;
+
+    // 1. In-memory cache
+    if (rewatchCache[anilistId] !== undefined) {
+      return Boolean(rewatchCache[anilistId]);
+    }
+
+    // 2. Check DOM elements (Miruro ListButtons component renders title/label with "Repeating" or "Rewatching")
+    const domSelectors = [
+      'button[title*="Repeating" i]',
+      'button[title*="Rewatching" i]',
+      'button[aria-label*="Repeating" i]',
+      'button[aria-label*="Rewatching" i]',
+      '[class*="editListButton"][title*="Repeating" i]',
+      '[class*="editListButton"][title*="Rewatching" i]',
+      '[class*="isOnList"][title*="Repeating" i]',
+      '[class*="isOnList"][title*="Rewatching" i]'
+    ];
+
+    for (const sel of domSelectors) {
+      if (document.querySelector(sel)) {
+        rewatchCache[anilistId] = true;
+        return true;
+      }
+    }
+
+    // Check list action buttons text content
+    const listBtns = document.querySelectorAll(
+      'button[class*="editList" i], button[class*="addButton" i], button[class*="list" i]'
+    );
+    for (const btn of listBtns) {
+      const text = (btn.textContent || btn.getAttribute("title") || btn.getAttribute("aria-label") || "").toLowerCase();
+      if (text.includes("repeating") || text.includes("rewatching")) {
+        rewatchCache[anilistId] = true;
+        return true;
+      }
+    }
+
+    // 3. Check TanStack Query Cache in window.localStorage ("miruro:cache:query-v2")
+    try {
+      const cacheRaw = window.localStorage.getItem("miruro:cache:query-v2");
+      if (cacheRaw) {
+        const cache = JSON.parse(cacheRaw);
+        const queries = cache?.clientState?.queries;
+        if (Array.isArray(queries)) {
+          const targetIdNum = parseInt(anilistId, 10);
+          for (const q of queries) {
+            const qKey = q?.queryKey;
+            if (!Array.isArray(qKey)) continue;
+
+            // AniList user-list
+            if (qKey[0] === "anilist" && qKey[1] === "user-list") {
+              const lists = q?.state?.data?.lists || [];
+              for (const list of lists) {
+                const isRepeatingList = list?.status === "REPEATING" || /rewatch|repeat/i.test(list?.name || "");
+                const entries = list?.entries || [];
+                for (const entry of entries) {
+                  const entryId = entry?.mediaId || entry?.media?.id || entry?.id;
+                  if (entryId == targetIdNum) {
+                    if (isRepeatingList || entry?.status === "REPEATING" || (entry?.repeat && entry.repeat > 0)) {
+                      rewatchCache[anilistId] = true;
+                      return true;
+                    }
+                  }
+                }
+              }
+            }
+
+            // MAL user-list
+            if (qKey[0] === "mal" && qKey[1] === "user-list") {
+              const entries = q?.state?.data?.data || q?.state?.data?.list || [];
+              for (const item of entries) {
+                const node = item?.node || item;
+                const status = item?.list_status || item?.status;
+                const animeId = node?.id;
+                if (animeId == targetIdNum) {
+                  if (status?.is_rewatching || status?.status === "rewatching" || status === "rewatching") {
+                    rewatchCache[anilistId] = true;
+                    return true;
+                  }
+                }
+              }
+            }
+
+            // Anime detail entry in query cache
+            if (qKey[0] === "catalog" && qKey[1] === "anime" && qKey[2] === "detail" && qKey[3] == targetIdNum) {
+              const entry = q?.state?.data?.mediaListEntry || q?.state?.data?.entry;
+              if (entry?.status === "REPEATING" || entry?.status === "rewatching" || (entry?.repeat && entry.repeat > 0)) {
+                rewatchCache[anilistId] = true;
+                return true;
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    return false;
   }
 
   /* ── Clean Anime Title ─────────────────────────────────── */
@@ -302,12 +426,18 @@
     pendingFetches.add(id);
 
     try {
+            const auth = getConnectedTracker();
+      const headers = {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      };
+      if (auth && auth.provider === "anilist" && auth.token) {
+        headers.Authorization = `Bearer ${auth.token}`;
+      }
+
       const resp = await fetch("https://graphql.anilist.co", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json"
-        },
+        headers: headers,
         body: JSON.stringify({
           query: `
             query ($id: Int) {
@@ -321,6 +451,11 @@
                   extraLarge
                   large
                 }
+                mediaListEntry {
+                  status
+                  progress
+                  repeat
+                }
               }
             }
           `,
@@ -332,6 +467,13 @@
       const media = json?.data?.Media;
       const cover = media?.coverImage?.extraLarge || media?.coverImage?.large;
       const title = media?.title?.english || media?.title?.romaji || media?.title?.userPreferred;
+      const listEntry = media?.mediaListEntry;
+
+      if (listEntry) {
+        if (listEntry.status === "REPEATING" || (listEntry.repeat && listEntry.repeat > 0)) {
+          rewatchCache[id] = true;
+        }
+      };
 
       let updated = false;
       if (cover) {
@@ -404,12 +546,27 @@
       activity.name = animeTitle;
       activity.details = animeTitle;
 
-      if (episodeNum) {
-        activity.state = episodeTitle
-          ? `Episode ${episodeNum} - ${episodeTitle}`
-          : `Episode ${episodeNum}`;
+      const anilistId = getAniListId();
+      const isRewatching = isAnimeRewatching(anilistId);
+      const connectedTracker = getConnectedTracker();
+      if (connectedTracker && !hasLoggedTracker) {
+        hasLoggedTracker = true;
+        console.log(`[Miruro RPC] Connected Tracker: ${connectedTracker.name} (${connectedTracker.provider})`);
+        try { chrome.storage.local.set({ miruro_tracker: connectedTracker.name }).catch(() => {}); } catch (_) {}
+      }
+
+      if (isRewatching) {
+        activity.state = episodeNum
+          ? (episodeTitle ? `Rewatching Ep ${episodeNum} - ${episodeTitle}` : `Rewatching Episode ${episodeNum}`)
+          : (episodeTitle ? `Rewatching: ${episodeTitle}` : "Rewatching Episode");
       } else {
-        activity.state = episodeTitle || "Watching Episode";
+        if (episodeNum) {
+          activity.state = episodeTitle
+            ? `Episode ${episodeNum} - ${episodeTitle}`
+            : `Episode ${episodeNum}`;
+        } else {
+          activity.state = episodeTitle || "Watching Episode";
+        }
       }
 
       if (settings.cover && coverArt) {
@@ -444,12 +601,12 @@
           delete activity.timestamps;
         }
         activity.assets.small_image = PLAY_ICON;
-        activity.assets.small_text = "Playing";
+        activity.assets.small_text = isRewatching ? "Rewatching" : "Playing";
       } else if (activeVideo && activeVideo.paused) {
         // Paused: immediately delete timestamps
         delete activity.timestamps;
         activity.assets.small_image = PAUSE_ICON;
-        activity.assets.small_text = "Paused";
+        activity.assets.small_text = isRewatching ? "Paused (Rewatching)" : "Paused";
       }
 
       if (settings.buttons) {
@@ -474,7 +631,9 @@
       const coverArt = getCoverArt();
 
       activity.details = animeTitle || "Viewing Anime";
-      activity.state = "Viewing Anime Details";
+      const infoId = getAniListId();
+      const isInfoRewatching = isAnimeRewatching(infoId);
+      activity.state = isInfoRewatching ? "Rewatching Anime Details" : "Viewing Anime Details";
 
       if (settings.cover && coverArt) {
         activity.assets.large_image = coverArt;
@@ -641,6 +800,7 @@
 
   window.addEventListener("popstate", onLocationChange);
   window.addEventListener("miruro:routechange", onLocationChange);
+  window.addEventListener("storage", () => { updatePresence(); });
 
   // MutationObserver for DOM changes, title updates, route changes
   let lastHref = document.location.href;

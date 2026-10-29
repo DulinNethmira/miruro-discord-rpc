@@ -305,7 +305,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     miruroPreviewBadge.className = "preview-badge";
     const smallText = presence.assets?.small_text?.toLowerCase();
 
-    if (smallText === "playing") {
+    if (
+      presence.state?.toLowerCase().includes("rewatching") ||
+      smallText?.includes("rewatching")
+    ) {
+      miruroPreviewBadge.classList.add("badge-rewatching");
+      miruroPreviewBadge.textContent = "REWATCHING";
+    } else if (smallText === "playing") {
       miruroPreviewBadge.classList.add("badge-playing");
       miruroPreviewBadge.textContent = "PLAYING";
     } else if (smallText === "paused") {
