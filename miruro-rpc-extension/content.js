@@ -16,7 +16,24 @@
   const coverCache = {};
   const titleCache = {};
   const rewatchCache = {};
+  const idCache = {};
   let hasLoggedTracker = false;
+
+  /* ── String Normalizer ─────────────────────────────────── */
+  function normalizeStr(str) {
+    return (str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  /* ── Extract URL Slug ──────────────────────────────────── */
+  function getUrlSlug() {
+    const { pathname } = document.location;
+    const parts = pathname.split("/").filter(Boolean);
+    const last = parts[parts.length - 1];
+    if (last && !/^\d+$/.test(last) && !last.startsWith("ep-") && last !== "watch" && last !== "info") {
+      return last;
+    }
+    return null;
+  }
   const pendingFetches = new Set();
   let videoData = { currentTime: 0, duration: 0, paused: true };
   let boundMainVideo = null;
@@ -61,7 +78,7 @@
     }
   }
 
-  /* ── Extract AniList ID from URL ───────────────────────── */
+  /* ── Extract AniList ID from URL, Storage, or Cache ─────── */
   function getAniListId() {
     const { pathname, search, href } = document.location;
 
@@ -81,6 +98,48 @@
     // 4. Standalone numeric segment
     const segmentMatch = pathname.match(/(?:^|\/)(\d{2,8})(?:\/|$)/);
     if (segmentMatch) return segmentMatch[1];
+
+    // 5. In-memory resolved slug or title mapping
+    const slug = getUrlSlug();
+    if (slug && idCache[normalizeStr(slug)]) return idCache[normalizeStr(slug)];
+
+    const title = cleanTitle(document.title || "");
+    if (title && idCache[normalizeStr(title)]) return idCache[normalizeStr(title)];
+
+    // 6. Look up in Miruro localStorage ("miruro:navigation:anime-ids", "priver:navigation")
+    try {
+      const hashMatch = pathname.match(/\/(?:watch|info)\/([^/?#]+)/i);
+      const hash = hashMatch ? hashMatch[1] : null;
+
+      if (hash && !/^\d+$/.test(hash)) {
+        const navIdsRaw = window.localStorage.getItem("miruro:navigation:anime-ids");
+        if (navIdsRaw) {
+          const navIds = JSON.parse(navIdsRaw);
+          if (typeof navIds === "object" && navIds !== null && navIds[hash]) {
+            const mapped = navIds[hash];
+            const numId = typeof mapped === "number" ? mapped : (mapped.anime_id || mapped.id || mapped.anilist_id);
+            if (numId) {
+              if (slug) idCache[normalizeStr(slug)] = String(numId);
+              return String(numId);
+            }
+          }
+        }
+
+        const priverNavRaw = window.localStorage.getItem("priver:navigation");
+        if (priverNavRaw) {
+          const pNav = JSON.parse(priverNavRaw);
+          const animeIds = pNav?.animeIds;
+          if (typeof animeIds === "object" && animeIds !== null && animeIds[hash]) {
+            const mapped = animeIds[hash];
+            const numId = typeof mapped === "number" ? mapped : (mapped.anime_id || mapped.id || mapped.anilist_id);
+            if (numId) {
+              if (slug) idCache[normalizeStr(slug)] = String(numId);
+              return String(numId);
+            }
+          }
+        }
+      }
+    } catch (_) {}
 
     return null;
   }
@@ -106,12 +165,21 @@
   }
 
   /* ── Check if Anime is in Rewatching / Repeating status ── */
-  function isAnimeRewatching(anilistId) {
-    if (!anilistId) return false;
+  function isAnimeRewatching(anilistId, animeTitle) {
+    const title = animeTitle || getAnimeTitleFromDocument();
+    const normTitle = normalizeStr(title);
+    const slug = getUrlSlug();
+    const normSlug = normalizeStr(slug);
 
     // 1. In-memory cache
-    if (rewatchCache[anilistId] !== undefined) {
+    if (anilistId && rewatchCache[anilistId] !== undefined) {
       return Boolean(rewatchCache[anilistId]);
+    }
+    if (normTitle && rewatchCache[normTitle] !== undefined) {
+      return Boolean(rewatchCache[normTitle]);
+    }
+    if (normSlug && rewatchCache[normSlug] !== undefined) {
+      return Boolean(rewatchCache[normSlug]);
     }
 
     // 2. Check DOM elements (Miruro ListButtons component renders title/label with "Repeating" or "Rewatching")
@@ -128,7 +196,9 @@
 
     for (const sel of domSelectors) {
       if (document.querySelector(sel)) {
-        rewatchCache[anilistId] = true;
+        if (anilistId) rewatchCache[anilistId] = true;
+        if (normTitle) rewatchCache[normTitle] = true;
+        if (normSlug) rewatchCache[normSlug] = true;
         return true;
       }
     }
@@ -140,7 +210,9 @@
     for (const btn of listBtns) {
       const text = (btn.textContent || btn.getAttribute("title") || btn.getAttribute("aria-label") || "").toLowerCase();
       if (text.includes("repeating") || text.includes("rewatching")) {
-        rewatchCache[anilistId] = true;
+        if (anilistId) rewatchCache[anilistId] = true;
+        if (normTitle) rewatchCache[normTitle] = true;
+        if (normSlug) rewatchCache[normSlug] = true;
         return true;
       }
     }
@@ -152,7 +224,7 @@
         const cache = JSON.parse(cacheRaw);
         const queries = cache?.clientState?.queries;
         if (Array.isArray(queries)) {
-          const targetIdNum = parseInt(anilistId, 10);
+          const targetIdNum = anilistId ? parseInt(anilistId, 10) : null;
           for (const q of queries) {
             const qKey = q?.queryKey;
             if (!Array.isArray(qKey)) continue;
@@ -165,9 +237,32 @@
                 const entries = list?.entries || [];
                 for (const entry of entries) {
                   const entryId = entry?.mediaId || entry?.media?.id || entry?.id;
-                  if (entryId == targetIdNum) {
+
+                  let matches = false;
+                  if (targetIdNum && entryId == targetIdNum) {
+                    matches = true;
+                  } else {
+                    const titles = [
+                      entry?.media?.title?.english,
+                      entry?.media?.title?.romaji,
+                      entry?.media?.title?.userPreferred,
+                      entry?.title
+                    ].filter(Boolean);
+                    matches = titles.some((t) => {
+                      const n = normalizeStr(t);
+                      return n && (n === normTitle || n === normSlug || n.includes(normTitle) || normTitle.includes(n));
+                    });
+                  }
+
+                  if (matches) {
+                    if (entryId) {
+                      idCache[normTitle] = String(entryId);
+                      idCache[normSlug] = String(entryId);
+                    }
                     if (isRepeatingList || entry?.status === "REPEATING" || (entry?.repeat && entry.repeat > 0)) {
-                      rewatchCache[anilistId] = true;
+                      if (entryId) rewatchCache[entryId] = true;
+                      if (normTitle) rewatchCache[normTitle] = true;
+                      if (normSlug) rewatchCache[normSlug] = true;
                       return true;
                     }
                   }
@@ -182,9 +277,27 @@
                 const node = item?.node || item;
                 const status = item?.list_status || item?.status;
                 const animeId = node?.id;
-                if (animeId == targetIdNum) {
+
+                let matches = false;
+                if (targetIdNum && animeId == targetIdNum) {
+                  matches = true;
+                } else {
+                  const titles = [node?.title, node?.alternative_titles?.en, node?.alternative_titles?.ja].filter(Boolean);
+                  matches = titles.some((t) => {
+                    const n = normalizeStr(t);
+                    return n && (n === normTitle || n === normSlug || n.includes(normTitle) || normTitle.includes(n));
+                  });
+                }
+
+                if (matches) {
+                  if (animeId) {
+                    idCache[normTitle] = String(animeId);
+                    idCache[normSlug] = String(animeId);
+                  }
                   if (status?.is_rewatching || status?.status === "rewatching" || status === "rewatching") {
-                    rewatchCache[anilistId] = true;
+                    if (animeId) rewatchCache[animeId] = true;
+                    if (normTitle) rewatchCache[normTitle] = true;
+                    if (normSlug) rewatchCache[normSlug] = true;
                     return true;
                   }
                 }
@@ -192,17 +305,44 @@
             }
 
             // Anime detail entry in query cache
-            if (qKey[0] === "catalog" && qKey[1] === "anime" && qKey[2] === "detail" && qKey[3] == targetIdNum) {
-              const entry = q?.state?.data?.mediaListEntry || q?.state?.data?.entry;
-              if (entry?.status === "REPEATING" || entry?.status === "rewatching" || (entry?.repeat && entry.repeat > 0)) {
-                rewatchCache[anilistId] = true;
-                return true;
+            if (qKey[0] === "catalog" && qKey[1] === "anime") {
+              const data = q?.state?.data;
+              const entry = data?.mediaListEntry || data?.entry;
+              const dId = data?.id;
+
+              let matches = false;
+              if (targetIdNum && (qKey[3] == targetIdNum || dId == targetIdNum)) {
+                matches = true;
+              } else {
+                const titles = [data?.title?.english, data?.title?.romaji, data?.title?.userPreferred].filter(Boolean);
+                matches = titles.some((t) => {
+                  const n = normalizeStr(t);
+                  return n && (n === normTitle || n === normSlug || n.includes(normTitle) || normTitle.includes(n));
+                });
+              }
+
+              if (matches) {
+                if (dId) {
+                  idCache[normTitle] = String(dId);
+                  idCache[normSlug] = String(dId);
+                }
+                if (entry?.status === "REPEATING" || entry?.status === "rewatching" || (entry?.repeat && entry.repeat > 0)) {
+                  if (dId) rewatchCache[dId] = true;
+                  if (normTitle) rewatchCache[normTitle] = true;
+                  if (normSlug) rewatchCache[normSlug] = true;
+                  return true;
+                }
               }
             }
           }
         }
       }
     } catch (_) {}
+
+    // 4. Query AniList directly by title in background if not known yet
+    if (title && title !== "Anime" && title !== "Miruro") {
+      fetchAniListMedia(title, document.location.pathname, true);
+    }
 
     return false;
   }
@@ -365,14 +505,19 @@
   function getCoverArt() {
     const key = document.location.pathname;
     const anilistId = getAniListId();
+    const animeTitle = getAnimeTitleFromDocument();
+    const normTitle = normalizeStr(animeTitle);
 
     // 1. Memory cache check
     if (anilistId && coverCache[anilistId]) return coverCache[anilistId];
+    if (normTitle && coverCache[normTitle]) return coverCache[normTitle];
     if (coverCache[key]) return coverCache[key];
 
     // 2. Fetch official extraLarge cover directly from AniList GraphQL
     if (anilistId) {
       fetchAniListMedia(anilistId, key);
+    } else if (animeTitle && animeTitle !== "Anime" && animeTitle !== "Miruro") {
+      fetchAniListMedia(animeTitle, key, true);
     }
 
     // 3. Scrape ONLY genuine anime poster images in the DOM
@@ -421,12 +566,12 @@
   }
 
   /* ── Fetch official Cover & Title from AniList GraphQL ─── */
-  async function fetchAniListMedia(id, cacheKey) {
-    if (!id || pendingFetches.has(id)) return;
-    pendingFetches.add(id);
+  async function fetchAniListMedia(idOrTitle, cacheKey, isSearch = false) {
+    if (!idOrTitle || pendingFetches.has(String(idOrTitle))) return;
+    pendingFetches.add(String(idOrTitle));
 
     try {
-            const auth = getConnectedTracker();
+      const auth = getConnectedTracker();
       const headers = {
         "Content-Type": "application/json",
         Accept: "application/json"
@@ -435,64 +580,106 @@
         headers.Authorization = `Bearer ${auth.token}`;
       }
 
+      const isNumeric = /^\d+$/.test(String(idOrTitle)) && !isSearch;
+      const query = isNumeric
+        ? `
+          query ($id: Int) {
+            Media(id: $id, type: ANIME) {
+              id
+              title {
+                english
+                romaji
+                userPreferred
+              }
+              coverImage {
+                extraLarge
+                large
+              }
+              mediaListEntry {
+                status
+                progress
+                repeat
+              }
+            }
+          }
+        `
+        : `
+          query ($search: String) {
+            Media(search: $search, type: ANIME) {
+              id
+              title {
+                english
+                romaji
+                userPreferred
+              }
+              coverImage {
+                extraLarge
+                large
+              }
+              mediaListEntry {
+                status
+                progress
+                repeat
+              }
+            }
+          }
+        `;
+
+      const variables = isNumeric
+        ? { id: parseInt(idOrTitle, 10) }
+        : { search: String(idOrTitle) };
+
       const resp = await fetch("https://graphql.anilist.co", {
         method: "POST",
         headers: headers,
-        body: JSON.stringify({
-          query: `
-            query ($id: Int) {
-              Media(id: $id) {
-                title {
-                  english
-                  romaji
-                  userPreferred
-                }
-                coverImage {
-                  extraLarge
-                  large
-                }
-                mediaListEntry {
-                  status
-                  progress
-                  repeat
-                }
-              }
-            }
-          `,
-          variables: { id: parseInt(id, 10) }
-        })
+        body: JSON.stringify({ query, variables })
       });
 
       const json = await resp.json();
       const media = json?.data?.Media;
-      const cover = media?.coverImage?.extraLarge || media?.coverImage?.large;
-      const title = media?.title?.english || media?.title?.romaji || media?.title?.userPreferred;
-      const listEntry = media?.mediaListEntry;
+      if (!media) return;
+
+      const id = String(media.id);
+      const cover = media.coverImage?.extraLarge || media.coverImage?.large;
+      const title = media.title?.english || media.title?.romaji || media.title?.userPreferred;
+      const listEntry = media.mediaListEntry;
+
+      const normOrig = normalizeStr(String(idOrTitle));
+      const normTitle = normalizeStr(title);
+
+      idCache[normOrig] = id;
+      idCache[normTitle] = id;
 
       if (listEntry) {
         if (listEntry.status === "REPEATING" || (listEntry.repeat && listEntry.repeat > 0)) {
           rewatchCache[id] = true;
+          rewatchCache[normOrig] = true;
+          rewatchCache[normTitle] = true;
         }
-      };
+      }
 
       let updated = false;
       if (cover) {
         coverCache[cacheKey] = cover;
         coverCache[id] = cover;
+        coverCache[normOrig] = cover;
+        coverCache[normTitle] = cover;
         updated = true;
       }
       if (title) {
         titleCache[id] = title;
+        titleCache[normOrig] = title;
+        titleCache[normTitle] = title;
         updated = true;
       }
 
-      if (updated) {
+      if (updated || listEntry) {
         updatePresence();
       }
     } catch (_) {
       // Fail safely
     } finally {
-      pendingFetches.delete(id);
+      pendingFetches.delete(String(idOrTitle));
     }
   }
 
@@ -547,7 +734,7 @@
       activity.details = animeTitle;
 
       const anilistId = getAniListId();
-      const isRewatching = isAnimeRewatching(anilistId);
+      const isRewatching = isAnimeRewatching(anilistId, animeTitle);
       const connectedTracker = getConnectedTracker();
       if (connectedTracker && !hasLoggedTracker) {
         hasLoggedTracker = true;
@@ -632,7 +819,7 @@
 
       activity.details = animeTitle || "Viewing Anime";
       const infoId = getAniListId();
-      const isInfoRewatching = isAnimeRewatching(infoId);
+      const isInfoRewatching = isAnimeRewatching(infoId, animeTitle);
       activity.state = isInfoRewatching ? "Rewatching Anime Details" : "Viewing Anime Details";
 
       if (settings.cover && coverArt) {
