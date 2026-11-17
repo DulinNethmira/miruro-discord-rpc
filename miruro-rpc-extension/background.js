@@ -1,6 +1,6 @@
 /**
- * Miruro & VidBox Discord Rich Presence — Background Service Worker
- * Coordinates content scripts, tab lifecycles, dual-service arbitration, settings, and offscreen Discord bridge.
+ * Miruro, VidBox & Cinejoy Discord Rich Presence — Background Service Worker
+ * Coordinates content scripts, tab lifecycles, tri-service arbitration, settings, and offscreen Discord bridge.
  */
 
 const MIRURO_URL_PATTERNS = [
@@ -17,15 +17,22 @@ const VIDBOX_URL_PATTERNS = [
   "*://*.vidbox.me/*"
 ];
 
+const CINEJOY_URL_PATTERNS = [
+  "*://*.cinejoy.pk/*",
+  "*://cinejoy.pk/*"
+];
+
 // In-memory state tracking
 const activePresences = {
   miruro: null,
-  vidbox: null
+  vidbox: null,
+  cinejoy: null
 };
 
 const activePlayback = {
   miruro: false,
-  vidbox: false
+  vidbox: false,
+  cinejoy: false
 };
 
 let lastActiveService = "miruro";
@@ -85,6 +92,11 @@ chrome.runtime.onInstalled.addListener(async () => {
     "vidbox_timestamps",
     "vidbox_cover",
     "vidbox_buttons",
+    "cinejoy_enabled",
+    "cinejoy_browsing",
+    "cinejoy_timestamps",
+    "cinejoy_cover",
+    "cinejoy_buttons",
     "enabled",
     "browsing",
     "timestamps",
@@ -110,6 +122,13 @@ chrome.runtime.onInstalled.addListener(async () => {
     vidbox_cover: data.vidbox_cover !== undefined ? data.vidbox_cover : true,
     vidbox_buttons: data.vidbox_buttons !== undefined ? data.vidbox_buttons : true,
 
+    // Cinejoy settings
+    cinejoy_enabled: data.cinejoy_enabled !== undefined ? data.cinejoy_enabled : true,
+    cinejoy_browsing: data.cinejoy_browsing !== undefined ? data.cinejoy_browsing : true,
+    cinejoy_timestamps: data.cinejoy_timestamps !== undefined ? data.cinejoy_timestamps : true,
+    cinejoy_cover: data.cinejoy_cover !== undefined ? data.cinejoy_cover : true,
+    cinejoy_buttons: data.cinejoy_buttons !== undefined ? data.cinejoy_buttons : true,
+
     // Shared Discord Settings
     discordUserId: data.discordUserId || "",
     discordAppId: data.discordAppId || "",
@@ -117,6 +136,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
     miruro_lastPresence: null,
     vidbox_lastPresence: null,
+    cinejoy_lastPresence: null,
     lastPresence: null,
     discordConnected: false,
     discordPort: null
@@ -160,28 +180,34 @@ async function ensureOffscreenDocument() {
 
 /**
  * Core Presence Arbitration Engine:
- * Selects between Miruro and VidBox presence based on video playback and active tab focus.
+ * Selects between Miruro, VidBox, and Cinejoy presence based on video playback and active tab focus.
  */
 async function syncDiscordActivity() {
   const settings = await chrome.storage.local.get([
     "miruro_enabled",
     "vidbox_enabled",
+    "cinejoy_enabled",
     "enabled"
   ]);
 
   const miruroEnabled = settings.miruro_enabled !== undefined ? settings.miruro_enabled : (settings.enabled !== false);
   const vidboxEnabled = settings.vidbox_enabled !== undefined ? settings.vidbox_enabled : true;
+  const cinejoyEnabled = settings.cinejoy_enabled !== undefined ? settings.cinejoy_enabled : true;
 
   let chosenActivity = null;
 
   // Rule 1: Active video playback takes absolute priority
-  if (activePlayback.vidbox && activePresences.vidbox && vidboxEnabled) {
+  if (activePlayback.cinejoy && activePresences.cinejoy && cinejoyEnabled) {
+    chosenActivity = activePresences.cinejoy;
+  } else if (activePlayback.vidbox && activePresences.vidbox && vidboxEnabled) {
     chosenActivity = activePresences.vidbox;
   } else if (activePlayback.miruro && activePresences.miruro && miruroEnabled) {
     chosenActivity = activePresences.miruro;
   } else {
     // Rule 2: Most recently updated or active service tab
-    if (lastActiveService === "vidbox" && activePresences.vidbox && vidboxEnabled) {
+    if (lastActiveService === "cinejoy" && activePresences.cinejoy && cinejoyEnabled) {
+      chosenActivity = activePresences.cinejoy;
+    } else if (lastActiveService === "vidbox" && activePresences.vidbox && vidboxEnabled) {
       chosenActivity = activePresences.vidbox;
     } else if (lastActiveService === "miruro" && activePresences.miruro && miruroEnabled) {
       chosenActivity = activePresences.miruro;
@@ -189,6 +215,8 @@ async function syncDiscordActivity() {
       chosenActivity = activePresences.miruro;
     } else if (activePresences.vidbox && vidboxEnabled) {
       chosenActivity = activePresences.vidbox;
+    } else if (activePresences.cinejoy && cinejoyEnabled) {
+      chosenActivity = activePresences.cinejoy;
     }
   }
 
@@ -205,7 +233,7 @@ async function syncDiscordActivity() {
 }
 
 /**
- * Check if active tabs remain open for Miruro and VidBox.
+ * Check if active tabs remain open for Miruro, VidBox, and Cinejoy.
  */
 async function checkAllTabs() {
   try {
@@ -221,6 +249,13 @@ async function checkAllTabs() {
       activePresences.vidbox = null;
       activePlayback.vidbox = false;
       await chrome.storage.local.set({ vidbox_lastPresence: null });
+    }
+
+    const cinejoyTabs = await chrome.tabs.query({ url: CINEJOY_URL_PATTERNS });
+    if (!cinejoyTabs || cinejoyTabs.length === 0) {
+      activePresences.cinejoy = null;
+      activePlayback.cinejoy = false;
+      await chrome.storage.local.set({ cinejoy_lastPresence: null });
     }
 
     await syncDiscordActivity();
@@ -261,6 +296,9 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     ) {
       lastActiveService = "vidbox";
       syncDiscordActivity();
+    } else if (tab.url.includes("cinejoy.pk")) {
+      lastActiveService = "cinejoy";
+      syncDiscordActivity();
     }
   } catch (_) {}
 });
@@ -268,7 +306,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
 // React to user changes in popup toggles
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local") {
-    if (changes.miruro_enabled || changes.vidbox_enabled || changes.enabled) {
+    if (changes.miruro_enabled || changes.vidbox_enabled || changes.cinejoy_enabled || changes.enabled) {
       syncDiscordActivity();
       requestTabsPresenceUpdate();
     }
@@ -283,6 +321,11 @@ async function requestTabsPresenceUpdate() {
 
   const vidboxTabs = await chrome.tabs.query({ url: VIDBOX_URL_PATTERNS });
   for (const tab of vidboxTabs) {
+    chrome.tabs.sendMessage(tab.id, { type: "FORCE_PRESENCE_SYNC" }, { frameId: 0 }).catch(() => {});
+  }
+
+  const cinejoyTabs = await chrome.tabs.query({ url: CINEJOY_URL_PATTERNS });
+  for (const tab of cinejoyTabs) {
     chrome.tabs.sendMessage(tab.id, { type: "FORCE_PRESENCE_SYNC" }, { frameId: 0 }).catch(() => {});
   }
 }
@@ -333,7 +376,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 4. Miruro Clear Presence
+  // 4. Cinejoy Presence update
+  if (message.type === "CINEJOY_SET_PRESENCE") {
+    activePresences.cinejoy = message.data;
+    activePlayback.cinejoy = message.data?.assets?.small_text?.toLowerCase() === "playing";
+    lastActiveService = "cinejoy";
+
+    chrome.storage.local.set({ cinejoy_lastPresence: message.data }).catch(() => {});
+    syncDiscordActivity();
+    sendResponse({ received: true });
+    return true;
+  }
+
+  // 5. Miruro Clear Presence
   if (message.type === "MIRURO_CLEAR_PRESENCE") {
     activePresences.miruro = null;
     activePlayback.miruro = false;
@@ -343,11 +398,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  // 5. VidBox Clear Presence
+  // 6. VidBox Clear Presence
   if (message.type === "VIDBOX_CLEAR_PRESENCE") {
     activePresences.vidbox = null;
     activePlayback.vidbox = false;
     chrome.storage.local.set({ vidbox_lastPresence: null }).catch(() => {});
+    syncDiscordActivity();
+    sendResponse({ received: true });
+    return true;
+  }
+
+  // 7. Cinejoy Clear Presence
+  if (message.type === "CINEJOY_CLEAR_PRESENCE") {
+    activePresences.cinejoy = null;
+    activePlayback.cinejoy = false;
+    chrome.storage.local.set({ cinejoy_lastPresence: null }).catch(() => {});
     syncDiscordActivity();
     sendResponse({ received: true });
     return true;

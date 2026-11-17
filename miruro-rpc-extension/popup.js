@@ -1,6 +1,6 @@
 /**
- * Miruro & VidBox Discord Rich Presence — Popup Controller
- * Manages dual-service tabs (Miruro / VidBox), previews, preferences, and custom Discord IDs.
+ * Miruro, VidBox & Cinejoy Discord Rich Presence — Popup Controller
+ * Manages tri-service tabs (Miruro / VidBox / Cinejoy), previews, preferences, and custom Discord IDs.
  */
 
 const DEFAULT_APP_ID = "1563994278965813358";
@@ -9,8 +9,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Tab Elements
   const tabBtnMiruro = document.getElementById("tabBtnMiruro");
   const tabBtnVidbox = document.getElementById("tabBtnVidbox");
+  const tabBtnCinejoy = document.getElementById("tabBtnCinejoy");
   const panelMiruro = document.getElementById("panelMiruro");
   const panelVidbox = document.getElementById("panelVidbox");
+  const panelCinejoy = document.getElementById("panelCinejoy");
 
   // Connection Status Elements
   const statusDot = document.getElementById("statusDot");
@@ -38,6 +40,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   const vidboxOptCover = document.getElementById("vidboxOptCover");
   const vidboxOptButtons = document.getElementById("vidboxOptButtons");
 
+  // Cinejoy Panel Elements
+  const cinejoyPreviewPoster = document.getElementById("cinejoyPreviewPoster");
+  const cinejoyPreviewTitle = document.getElementById("cinejoyPreviewTitle");
+  const cinejoyPreviewDesc = document.getElementById("cinejoyPreviewDesc");
+  const cinejoyPreviewBadge = document.getElementById("cinejoyPreviewBadge");
+  const cinejoyMasterSwitch = document.getElementById("cinejoyMasterSwitch");
+  const cinejoyOptBrowsing = document.getElementById("cinejoyOptBrowsing");
+  const cinejoyOptTimestamps = document.getElementById("cinejoyOptTimestamps");
+  const cinejoyOptCover = document.getElementById("cinejoyOptCover");
+  const cinejoyOptButtons = document.getElementById("cinejoyOptButtons");
+
   // Discord Configuration Elements
   const inputUserId = document.getElementById("inputUserId");
   const inputAppId = document.getElementById("inputAppId");
@@ -62,6 +75,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     "vidbox_cover",
     "vidbox_buttons",
     "vidbox_lastPresence",
+    // Cinejoy
+    "cinejoy_enabled",
+    "cinejoy_browsing",
+    "cinejoy_timestamps",
+    "cinejoy_cover",
+    "cinejoy_buttons",
+    "cinejoy_lastPresence",
     // Legacy Miruro fallbacks
     "enabled",
     "browsing",
@@ -83,21 +103,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   tabBtnMiruro.addEventListener("click", () => switchTab("miruro"));
   tabBtnVidbox.addEventListener("click", () => switchTab("vidbox"));
+  tabBtnCinejoy.addEventListener("click", () => switchTab("cinejoy"));
 
   function switchTab(tab) {
-    if (tab === "vidbox") {
-      tabBtnVidbox.classList.add("active");
-      tabBtnMiruro.classList.remove("active");
-      panelVidbox.classList.add("active");
-      panelMiruro.classList.remove("active");
-      chrome.storage.local.set({ activeTab: "vidbox" });
-    } else {
-      tabBtnMiruro.classList.add("active");
-      tabBtnVidbox.classList.remove("active");
-      panelMiruro.classList.add("active");
-      panelVidbox.classList.remove("active");
-      chrome.storage.local.set({ activeTab: "miruro" });
-    }
+    const isMiruro = tab === "miruro";
+    const isVidbox = tab === "vidbox";
+    const isCinejoy = tab === "cinejoy";
+
+    tabBtnMiruro.classList.toggle("active", isMiruro);
+    tabBtnVidbox.classList.toggle("active", isVidbox);
+    tabBtnCinejoy.classList.toggle("active", isCinejoy);
+
+    panelMiruro.classList.toggle("active", isMiruro);
+    panelVidbox.classList.toggle("active", isVidbox);
+    panelCinejoy.classList.toggle("active", isCinejoy);
+
+    chrome.storage.local.set({ activeTab: tab });
   }
 
   // Populate Miruro controls
@@ -116,6 +137,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   vidboxOptCover.checked = data.vidbox_cover !== undefined ? data.vidbox_cover : true;
   vidboxOptButtons.checked = data.vidbox_buttons !== undefined ? data.vidbox_buttons : true;
 
+  // Populate Cinejoy controls
+  const cinejoyEnabled = data.cinejoy_enabled !== undefined ? data.cinejoy_enabled : true;
+  cinejoyMasterSwitch.checked = cinejoyEnabled;
+  cinejoyOptBrowsing.checked = data.cinejoy_browsing !== undefined ? data.cinejoy_browsing : true;
+  cinejoyOptTimestamps.checked = data.cinejoy_timestamps !== undefined ? data.cinejoy_timestamps : true;
+  cinejoyOptCover.checked = data.cinejoy_cover !== undefined ? data.cinejoy_cover : true;
+  cinejoyOptButtons.checked = data.cinejoy_buttons !== undefined ? data.cinejoy_buttons : true;
+
   // Discord Configuration
   inputUserId.value = data.discordUserId || "";
   inputAppId.value = data.discordAppId || "";
@@ -124,6 +153,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   updateDiscordStatus(Boolean(data.discordConnected), data.discordUser, !data.discordConnected);
   updateMiruroPreview(data.miruro_lastPresence || (data.lastPresence?.name?.includes("Miruro") ? data.lastPresence : null), miruroEnabled);
   updateVidboxPreview(data.vidbox_lastPresence, vidboxEnabled);
+  updateCinejoyPreview(data.cinejoy_lastPresence, cinejoyEnabled);
 
   // Ping background service worker to ensure offscreen is alive & sync status
   chrome.runtime.sendMessage({ type: "CHECK_DISCORD_STATUS" }, (res) => {
@@ -180,6 +210,31 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   vidboxOptButtons.addEventListener("change", () => {
     chrome.storage.local.set({ vidbox_buttons: vidboxOptButtons.checked });
+  });
+
+  // ── Cinejoy Event Listeners ────────────────────────────────
+  cinejoyMasterSwitch.addEventListener("change", () => {
+    const isEnabled = cinejoyMasterSwitch.checked;
+    chrome.storage.local.set({ cinejoy_enabled: isEnabled });
+    chrome.storage.local.get(["cinejoy_lastPresence"], (res) => {
+      updateCinejoyPreview(res.cinejoy_lastPresence, isEnabled);
+    });
+  });
+
+  cinejoyOptBrowsing.addEventListener("change", () => {
+    chrome.storage.local.set({ cinejoy_browsing: cinejoyOptBrowsing.checked });
+  });
+
+  cinejoyOptTimestamps.addEventListener("change", () => {
+    chrome.storage.local.set({ cinejoy_timestamps: cinejoyOptTimestamps.checked });
+  });
+
+  cinejoyOptCover.addEventListener("change", () => {
+    chrome.storage.local.set({ cinejoy_cover: cinejoyOptCover.checked });
+  });
+
+  cinejoyOptButtons.addEventListener("change", () => {
+    chrome.storage.local.set({ cinejoy_buttons: cinejoyOptButtons.checked });
   });
 
   // ── Save Custom Discord IDs ────────────────────────────────
@@ -251,6 +306,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (changes.vidbox_lastPresence || changes.vidbox_enabled) {
         chrome.storage.local.get(["vidbox_lastPresence", "vidbox_enabled"], (res) => {
           updateVidboxPreview(res.vidbox_lastPresence, res.vidbox_enabled !== false);
+        });
+      }
+      if (changes.cinejoy_lastPresence || changes.cinejoy_enabled) {
+        chrome.storage.local.get(["cinejoy_lastPresence", "cinejoy_enabled"], (res) => {
+          updateCinejoyPreview(res.cinejoy_lastPresence, res.cinejoy_enabled !== false);
         });
       }
     }
@@ -374,6 +434,54 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
       vidboxPreviewBadge.classList.add("badge-idle");
       vidboxPreviewBadge.textContent = "ACTIVE";
+    }
+  }
+
+  function updateCinejoyPreview(presence, enabled) {
+    if (!enabled) {
+      cinejoyPreviewPoster.src = "icons/cinejoy-icon.png";
+      cinejoyPreviewTitle.textContent = "Cinejoy Presence Disabled";
+      cinejoyPreviewDesc.textContent = "Toggle switch above to enable";
+      cinejoyPreviewBadge.className = "preview-badge badge-idle";
+      cinejoyPreviewBadge.textContent = "DISABLED";
+      return;
+    }
+
+    if (!presence) {
+      cinejoyPreviewPoster.src = "icons/cinejoy-icon.png";
+      cinejoyPreviewTitle.textContent = "No Active Movie / TV";
+      cinejoyPreviewDesc.textContent = "Open Cinejoy to start";
+      cinejoyPreviewBadge.className = "preview-badge badge-idle";
+      cinejoyPreviewBadge.textContent = "IDLE";
+      return;
+    }
+
+    cinejoyPreviewPoster.src = presence.assets?.large_image || "icons/cinejoy-icon.png";
+    cinejoyPreviewTitle.textContent = presence.details || presence.name || "Cinejoy";
+    cinejoyPreviewDesc.textContent = presence.state || "Active";
+
+    cinejoyPreviewBadge.className = "preview-badge";
+    const smallText = presence.assets?.small_text?.toLowerCase();
+
+    if (
+      smallText === "playing" ||
+      presence.state?.toLowerCase().includes("watching")
+    ) {
+      cinejoyPreviewBadge.classList.add("badge-playing");
+      cinejoyPreviewBadge.textContent = "PLAYING";
+    } else if (smallText === "paused" || presence.state?.toLowerCase().includes("paused")) {
+      cinejoyPreviewBadge.classList.add("badge-paused");
+      cinejoyPreviewBadge.textContent = "PAUSED";
+    } else if (
+      presence.details?.toLowerCase().includes("browsing") ||
+      presence.details?.toLowerCase().includes("viewing") ||
+      presence.state?.toLowerCase().includes("details")
+    ) {
+      cinejoyPreviewBadge.classList.add("badge-browsing");
+      cinejoyPreviewBadge.textContent = "BROWSING";
+    } else {
+      cinejoyPreviewBadge.classList.add("badge-idle");
+      cinejoyPreviewBadge.textContent = "ACTIVE";
     }
   }
 });

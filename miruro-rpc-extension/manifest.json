@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Miruro & VidBox Discord RPC",
-  "version": "1.2.0",
-  "description": "Standalone Manifest V3 Chrome Extension providing live, permanent Discord Rich Presence for Miruro & VidBox directly through local Discord RPC.",
+  "name": "Miruro, VidBox & Cinejoy Discord RPC",
+  "version": "1.3.0",
+  "description": "Standalone Manifest V3 Chrome Extension providing live, permanent Discord Rich Presence for Miruro, VidBox & Cinejoy directly through local Discord RPC.",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",
@@ -23,6 +23,8 @@
     "*://*.vidbox.cc/*",
     "*://*.vidbox.ag/*",
     "*://*.vidbox.me/*",
+    "*://*.cinejoy.pk/*",
+    "*://cinejoy.pk/*",
     "*://api.themoviedb.org/*",
     "*://image.tmdb.org/*",
     "*://127.0.0.1/*",
@@ -64,6 +66,14 @@
       "run_at": "document_idle"
     },
     {
+      "matches": [
+        "*://*.cinejoy.pk/*",
+        "*://cinejoy.pk/*"
+      ],
+      "js": ["cinejoy-content.js"],
+      "run_at": "document_idle"
+    },
+    {
       "matches": ["<all_urls>"],
       "js": ["iframe.js"],
       "all_frames": true,
@@ -71,7 +81,7 @@
     }
   ],
   "action": {
-    "default_title": "Miruro & VidBox Discord RPC",
+    "default_title": "Miruro, VidBox & Cinejoy Discord RPC",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",

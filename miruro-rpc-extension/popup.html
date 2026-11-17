@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Miruro & VidBox Discord RPC</title>
+  <title>Miruro, VidBox & Cinejoy Discord RPC</title>
   <style>
     * {
       box-sizing: border-box;
@@ -12,8 +12,8 @@
     }
 
     body {
-      width: 336px;
-      max-height: 585px;
+      width: 340px;
+      max-height: 595px;
       overflow-y: auto;
       overflow-x: hidden;
       background-color: #0f0f13;
@@ -90,14 +90,15 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      padding: 6px 10px;
+      gap: 5px;
+      padding: 6px 4px;
       background: transparent;
       border: none;
       border-radius: 6px;
       color: #94a3b8;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 600;
+      white-space: nowrap;
       cursor: pointer;
       transition: all 0.2s ease;
     }
@@ -127,6 +128,11 @@
     .dot-vidbox {
       background: #ef4444;
       box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+    }
+
+    .dot-cinejoy {
+      background: #95FF50;
+      box-shadow: 0 0 6px rgba(149, 255, 80, 0.6);
     }
 
     /* ── Tab Panels ────────────────────────────────────── */
@@ -294,6 +300,14 @@
       background-color: #ef4444;
     }
 
+    input:checked + .slider-green {
+      background-color: #95FF50;
+    }
+
+    input:checked + .slider-green:before {
+      background-color: #0f0f13;
+    }
+
     input:checked + .slider:before {
       transform: translateX(16px);
     }
@@ -328,6 +342,10 @@
 
     .setting-item-vidbox input[type="checkbox"] {
       accent-color: #ef4444;
+    }
+
+    .setting-item-cinejoy input[type="checkbox"] {
+      accent-color: #95FF50;
     }
 
     /* ── Connection Badge ──────────────────────────────── */
@@ -511,7 +529,7 @@
     <div class="brand">
       <img src="icons/icon-48.png" alt="RPC Logo">
       <h1>Stream Discord RPC</h1>
-      <span>v1.2.0</span>
+      <span>v1.3.0</span>
     </div>
   </div>
 
@@ -519,11 +537,15 @@
   <div class="tab-bar">
     <button class="tab-btn active" id="tabBtnMiruro" data-tab="miruro">
       <span class="tab-dot dot-miruro"></span>
-      Miruro (Anime)
+      Miruro
     </button>
     <button class="tab-btn" id="tabBtnVidbox" data-tab="vidbox">
       <span class="tab-dot dot-vidbox"></span>
-      VidBox (Movies/TV)
+      VidBox
+    </button>
+    <button class="tab-btn" id="tabBtnCinejoy" data-tab="cinejoy">
+      <span class="tab-dot dot-cinejoy"></span>
+      Cinejoy
     </button>
   </div>
 
@@ -617,11 +639,53 @@
     </div>
   </div>
 
+  <!-- ══════════════ TAB 3: CINEJOY PANEL ══════════════ -->
+  <div class="tab-panel" id="panelCinejoy">
+    <!-- Activity Preview Card -->
+    <div class="preview-card">
+      <img src="icons/cinejoy-icon.png" alt="Cover" class="preview-poster" id="cinejoyPreviewPoster">
+      <div class="preview-info">
+        <div class="preview-title" id="cinejoyPreviewTitle">No Active Media</div>
+        <div class="preview-desc" id="cinejoyPreviewDesc">Open Cinejoy to start</div>
+        <div class="preview-badge badge-idle" id="cinejoyPreviewBadge">IDLE</div>
+      </div>
+    </div>
+
+    <!-- Master Switch -->
+    <div class="master-switch-row">
+      <span class="master-label">Enable Cinejoy Presence</span>
+      <label class="switch">
+        <input type="checkbox" id="cinejoyMasterSwitch" checked>
+        <span class="slider slider-green"></span>
+      </label>
+    </div>
+
+    <!-- Preferences Checklist -->
+    <div class="settings-list setting-item-cinejoy">
+      <label class="setting-item">
+        <input type="checkbox" id="cinejoyOptBrowsing" checked>
+        <span>Show Browsing Status</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="cinejoyOptTimestamps" checked>
+        <span>Show Video Timestamps</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="cinejoyOptCover" checked>
+        <span>Show Movie/TV Poster</span>
+      </label>
+      <label class="setting-item">
+        <input type="checkbox" id="cinejoyOptButtons" checked>
+        <span>Show Watch on Cinejoy Button</span>
+      </label>
+    </div>
+  </div>
+
   <!-- User Discord Configuration (Shared) -->
   <div class="config-box">
     <div class="config-title">
       <span>Discord Settings</span>
-      <span style="font-size: 9px; color: #64748b; text-transform: none;">Both Services</span>
+      <span style="font-size: 9px; color: #64748b; text-transform: none;">All Services</span>
     </div>
 
     <!-- Discord User ID (Optional) -->
